@@ -124,16 +124,17 @@ function playSample(path, element) {
     // Stop any current playback
     stopPlayback();
 
-    // Start new playback
+    // Always mark as selected/playing, even if preview fails
     currentlyPlayingPath = path;
     currentlyPlayingElement = element;
     element.classList.add('playing');
 
+    // Try to preview, but don't fail if it doesn't work (e.g., tilde samples)
     audioPlayer.src = `/preview-sample?path=${encodeURIComponent(path)}`;
     audioPlayer.play().catch(err => {
-        console.error('Failed to play sample:', err);
-        clearPlayingState();
-        toast.error('Could not play sample');
+        console.warn('Preview not available for this sample:', err);
+        // Keep selection but don't show error for tilde samples
+        // (they're symbolic links and can't be previewed)
     });
 }
 
@@ -213,6 +214,14 @@ async function openDirectory() {
     } catch (error) {
         console.error(`Failed to open ${currentDevice.toUpperCase()} directory:`, error);
         toast.error(`Could not open ${currentDevice === 'opz' ? 'OP-Z' : 'OP-1'} directory.`);
+    }
+}
+
+async function refreshSamples() {
+    if (currentDevice === 'opz') {
+        await fetchOpzSamples();
+    } else {
+        await fetchOp1Samples();
     }
 }
 
@@ -384,8 +393,16 @@ async function fetchOpzSamples() {
                 slotDiv.setAttribute("draggable", "true");
                 slotDiv.dataset.category = category;
                 slotDiv.dataset.slot = slotIndex;
+                if (slot.path) {
+                    slotDiv.dataset.path = slot.path;
+                }
 
                 slotDiv.addEventListener("dragstart", (e) => {
+                    // Prevent drag during rename
+                    if (currentRenameElement) {
+                        e.preventDefault();
+                        return;
+                    }
                     e.dataTransfer.setData("text/plain", JSON.stringify({
                         category,
                         slot: slotIndex,
@@ -439,33 +456,107 @@ async function fetchOpzSamples() {
 
                 const filename = slot.filename || "(empty)";
                 const filesize = slot.filesize ? ` (${(slot.filesize / 1024).toFixed(1)} KB)` : "";
-                if (typeof slot.filename === "string" && slot.filename !== "(empty)" && !slot.filename.startsWith("~")) {
+                const isTilde = slot.filename && slot.filename.startsWith("~");
+                const isFilled = slot.path && typeof slot.filename === "string" && slot.filename !== "(empty)" && !isTilde;
+
+                if (isFilled) {
                     opzNumSamples++;
+                    slotDiv.classList.add('filled');
+                } else if (isTilde) {
+                    slotDiv.classList.add('tilde');
+                } else {
+                    slotDiv.classList.add('empty');
                 }
-                const text = document.createElement("span");
-                text.textContent = `Slot ${slotIndex + 1}: ${filename}${filesize}`;
+
                 updateStorageDisplay('opz', data.storage, { numSamples: opzNumSamples });
 
+                const text = document.createElement("span");
+                text.classList.add('sample-name');
+                text.textContent = `Slot ${slotIndex + 1}: ${filename}${filesize}`;
+
+                // Button container
+                const buttonContainer = document.createElement("div");
+                buttonContainer.classList.add("sample-buttons");
+
+                // More actions button (always visible)
+                const moreBtn = document.createElement("button");
+                moreBtn.innerHTML = "⋯";
+                moreBtn.classList.add("more-actions-btn");
+                moreBtn.setAttribute("data-bs-toggle", "dropdown");
+                moreBtn.setAttribute("data-bs-container", "body");
+                moreBtn.setAttribute("aria-expanded", "false");
+
+                // Dropdown menu
+                const dropdown = document.createElement("div");
+                dropdown.classList.add("dropdown-menu", "sample-actions-dropdown");
+
+                const renameItem = document.createElement("a");
+                renameItem.classList.add("dropdown-item");
+                renameItem.textContent = "Rename";
+                renameItem.onclick = () => {
+                    if (currentRenameElement) return;
+                    startRename(slotDiv, slot.path, slot.filename);
+                };
+                if (!isFilled) renameItem.classList.add("disabled");
+
+                const copyItem = document.createElement("a");
+                copyItem.classList.add("dropdown-item");
+                copyItem.textContent = "Copy";
+                copyItem.onclick = () => {
+                    if (currentRenameElement) return;
+                    copySample(slot.path);
+                };
+                if (!isFilled) copyItem.classList.add("disabled");
+
+                const pasteItem = document.createElement("a");
+                pasteItem.classList.add("dropdown-item", "paste-item");
+                pasteItem.textContent = "Paste";
+                pasteItem.onclick = () => {
+                    if (currentRenameElement) return;
+                    pasteSample('opz', category, slotIndex);
+                };
+                // Paste state will be updated by clipboard monitoring
+
+                dropdown.appendChild(renameItem);
+                dropdown.appendChild(copyItem);
+                dropdown.appendChild(pasteItem);
+
+                // Delete button (only visible on filled slots via CSS)
                 const deleteBtn = document.createElement("button");
                 deleteBtn.textContent = "✕";
                 deleteBtn.classList.add("delete-btn");
-                deleteBtn.onclick = async () => {
+                deleteBtn.onclick = async (e) => {
+                    e.stopPropagation();
                     const samplePath = slot.path;
                     if (!samplePath) return;
                     await deleteSample('opz', samplePath, fetchOpzSamples);
                 };
 
-                // Add click handler for audio preview (only if slot has a sample)
-                if (slot.path) {
-                    slotDiv.addEventListener('click', (e) => {
-                        // Don't play if clicking delete button
-                        if (e.target.closest('.delete-btn')) return;
+                // Add click handler for ALL slots (including empty ones)
+                slotDiv.addEventListener('click', (e) => {
+                    // Don't play if clicking buttons or dropdown
+                    if (e.target.closest('.more-actions-btn') ||
+                        e.target.closest('.delete-btn') ||
+                        e.target.closest('.dropdown-menu')) return;
+
+                    if (slot.path) {
+                        // For filled slots, play audio
                         playSample(slot.path, slotDiv);
-                    });
-                }
+                    } else {
+                        // For empty slots, just select without playing
+                        stopPlayback();
+                        currentlyPlayingPath = null;
+                        currentlyPlayingElement = slotDiv;
+                        slotDiv.classList.add('playing');
+                    }
+                });
+
+                buttonContainer.appendChild(moreBtn);
+                buttonContainer.appendChild(dropdown);
+                buttonContainer.appendChild(deleteBtn);
 
                 slotDiv.appendChild(text);
-                slotDiv.appendChild(deleteBtn);
+                slotDiv.appendChild(buttonContainer);
                 container.appendChild(slotDiv);
             });
         });
@@ -474,6 +565,8 @@ async function fetchOpzSamples() {
         console.error("Failed to fetch OP-Z samples:", error);
     } finally {
         hideLoading('opz');
+        // Update paste button states after rendering
+        await updatePasteButtonStates();
     }
 }
 
@@ -521,6 +614,8 @@ async function fetchOp1Samples() {
         console.error("Failed to fetch OP-1 samples:", error);
     } finally {
         hideLoading('op1');
+        // Update paste button states after rendering
+        await updatePasteButtonStates();
     }
 }
 
@@ -600,25 +695,103 @@ function renderOp1Section(parentFolder, subdirectories) {
             files.forEach(file => {
                 const fileDiv = document.createElement('div');
                 fileDiv.classList.add('op1-sample');
+                fileDiv.classList.add('filled'); // OP-1 files are always filled
+                fileDiv.dataset.path = file.path;
 
                 const sizeKB = (file.size / 1024).toFixed(1);
                 const isPatch = file.category === 'patch';
                 const badgeClass = isPatch ? 'patch' : 'sample';
                 const badgeText = isPatch ? 'patch' : 'sample';
 
-                fileDiv.innerHTML = `
-                    <span class="sample-name">${escapeHtml(file.name)}</span>
-                    <span class="sample-size">${sizeKB} KB</span>
-                    <span class="sample-type-badge ${badgeClass}">${badgeText}</span>
-                    ${!isReadOnly ? `<button class="delete-btn" onclick="deleteSample('op1', '${escapeHtml(file.path)}', fetchOp1Samples)">✕</button>` : ''}
-                `;
+                // Sample name
+                const nameSpan = document.createElement('span');
+                nameSpan.classList.add('sample-name');
+                nameSpan.textContent = file.name;
+
+                // Size badge
+                const sizeSpan = document.createElement('span');
+                sizeSpan.classList.add('sample-size');
+                sizeSpan.textContent = `${sizeKB} KB`;
+
+                // Type badge
+                const typeBadge = document.createElement('span');
+                typeBadge.classList.add('sample-type-badge', badgeClass);
+                typeBadge.textContent = badgeText;
+
+                // Button container
+                const buttonContainer = document.createElement('div');
+                buttonContainer.classList.add('sample-buttons');
+
+                if (!isReadOnly) {
+                    // More actions button
+                    const moreBtn = document.createElement('button');
+                    moreBtn.innerHTML = '⋯';
+                    moreBtn.classList.add('more-actions-btn');
+                    moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+                    moreBtn.setAttribute('data-bs-container', 'body');
+                    moreBtn.setAttribute('aria-expanded', 'false');
+
+                    // Dropdown menu
+                    const dropdown = document.createElement('div');
+                    dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
+
+                    const renameItem = document.createElement('a');
+                    renameItem.classList.add('dropdown-item');
+                    renameItem.textContent = 'Rename';
+                    renameItem.onclick = () => {
+                        if (currentRenameElement) return;
+                        startRename(fileDiv, file.path, file.name);
+                    };
+
+                    const copyItem = document.createElement('a');
+                    copyItem.classList.add('dropdown-item');
+                    copyItem.textContent = 'Copy';
+                    copyItem.onclick = () => {
+                        if (currentRenameElement) return;
+                        copySample(file.path);
+                    };
+
+                    const pasteItem = document.createElement('a');
+                    pasteItem.classList.add('dropdown-item', 'paste-item');
+                    pasteItem.textContent = 'Paste';
+                    pasteItem.onclick = () => {
+                        if (currentRenameElement) return;
+                        pasteSample('op1', file.path);
+                    };
+
+                    dropdown.appendChild(renameItem);
+                    dropdown.appendChild(copyItem);
+                    dropdown.appendChild(pasteItem);
+
+                    // Delete button
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.textContent = '✕';
+                    deleteBtn.classList.add('delete-btn');
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteSample('op1', file.path, fetchOp1Samples);
+                    };
+
+                    buttonContainer.appendChild(moreBtn);
+                    buttonContainer.appendChild(dropdown);
+                    buttonContainer.appendChild(deleteBtn);
+                }
 
                 // Add click handler for audio preview
                 fileDiv.addEventListener('click', (e) => {
-                    // Don't play if clicking delete button
-                    if (e.target.closest('.delete-btn')) return;
+                    // Don't play if clicking buttons or dropdown
+                    if (e.target.closest('.more-actions-btn') ||
+                        e.target.closest('.delete-btn') ||
+                        e.target.closest('.dropdown-menu')) return;
                     playSample(file.path, fileDiv);
                 });
+
+                fileDiv.appendChild(nameSpan);
+                fileDiv.appendChild(sizeSpan);
+                fileDiv.appendChild(typeBadge);
+                if (!isReadOnly) {
+                    fileDiv.appendChild(buttonContainer);
+                }
 
                 content.appendChild(fileDiv);
             });
@@ -855,6 +1028,458 @@ function deleteOp1Subdirectory(path) {
 }
 
 // ============================================
+// Sample Actions: Rename, Copy, Paste
+// ============================================
+
+// State management
+let clipboardData = null;
+let currentRenameElement = null;
+let clipboardCheckInterval = null;
+
+/**
+ * Start inline rename of a sample
+ */
+function startRename(element, path, filename) {
+    // Prevent multiple simultaneous renames
+    if (currentRenameElement) {
+        return;
+    }
+
+    currentRenameElement = element;
+    element.classList.add('renaming');
+
+    // Disable draggable
+    element.setAttribute('draggable', 'false');
+
+    // Get the name span
+    const nameSpan = element.querySelector('.sample-name');
+    const originalText = nameSpan.textContent;
+
+    // Extract just the filename without slot prefix (for OP-Z)
+    let displayName = filename || originalText;
+    if (originalText.startsWith('Slot ')) {
+        // OP-Z format: "Slot X: filename.aif (size)"
+        const match = originalText.match(/Slot \d+: ([^(]+)/);
+        if (match) {
+            displayName = match[1].trim();
+        }
+    }
+
+    // Remove .aif/.aiff extension for editing
+    const nameWithoutExt = displayName.replace(/\.(aif|aiff)$/i, '');
+
+    // Create input field
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.classList.add('sample-name-input');
+    input.value = nameWithoutExt;
+    input.maxLength = 10;
+
+    // Replace span with input
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    // Save on Enter
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await finishRename(element, path, input.value, originalText, input);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelRename(element, originalText, input);
+        }
+    });
+
+    // Save on blur
+    input.addEventListener('blur', async () => {
+        await finishRename(element, path, input.value, originalText, input);
+    });
+}
+
+/**
+ * Finish rename operation
+ */
+async function finishRename(element, path, newName, originalText, input) {
+    if (!currentRenameElement) return;
+
+    // Validate new name
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+        toast.error('Filename cannot be empty');
+        cancelRename(element, originalText, input);
+        return;
+    }
+
+    // Validate characters (alphanumeric, underscore, hyphen only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedName)) {
+        toast.error('Invalid characters. Use only letters, numbers, hyphens, and underscores.');
+        cancelRename(element, originalText, input);
+        return;
+    }
+
+    // Check length
+    if (trimmedName.length > 10) {
+        toast.error('Filename must be 10 characters or less.');
+        cancelRename(element, originalText, input);
+        return;
+    }
+
+    // Call backend to rename
+    try {
+        const response = await fetch('/rename-sample', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                device: currentDevice,
+                old_path: path,
+                new_name: trimmedName
+            })
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to rename');
+        }
+
+        // Success - refresh the view
+        if (currentDevice === 'opz') {
+            await fetchOpzSamples();
+        } else {
+            await fetchOp1Samples();
+        }
+
+        toast.success('Sample renamed');
+    } catch (err) {
+        console.error('Rename failed:', err);
+        toast.error(err.message);
+        cancelRename(element, originalText, input);
+    } finally {
+        cleanupRename(element);
+    }
+}
+
+/**
+ * Cancel rename operation
+ */
+function cancelRename(element, originalText, input) {
+    const nameSpan = document.createElement('span');
+    nameSpan.classList.add('sample-name');
+    nameSpan.textContent = originalText;
+    input.replaceWith(nameSpan);
+    cleanupRename(element);
+}
+
+/**
+ * Cleanup rename state
+ */
+function cleanupRename(element) {
+    element.classList.remove('renaming');
+    element.setAttribute('draggable', 'true');
+    currentRenameElement = null;
+}
+
+/**
+ * Copy sample to clipboard (tries system clipboard first, falls back to internal)
+ */
+async function copySample(path) {
+    if (!path) {
+        toast.error('No sample to copy');
+        return;
+    }
+
+    // Try to copy to system clipboard first
+    try {
+        const response = await fetch('/copy-to-system-clipboard', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                device: currentDevice,
+                path: path
+            })
+        });
+
+        if (response.ok) {
+            // System clipboard successful
+            clipboardData = {
+                path: path,
+                device: currentDevice,
+                isSystemClipboard: true
+            };
+            updatePasteButtonStates();
+            toast.success('Sample copied to system clipboard');
+            return;
+        }
+    } catch (err) {
+        console.warn('System clipboard failed, using internal clipboard:', err);
+    }
+
+    // Fall back to internal clipboard
+    clipboardData = {
+        path: path,
+        device: currentDevice,
+        isSystemClipboard: false
+    };
+
+    updatePasteButtonStates();
+    toast.success('Sample copied to internal clipboard');
+}
+
+/**
+ * Paste sample from clipboard (supports both system and internal clipboard)
+ */
+async function pasteSample(device, targetPathOrCategory, slot) {
+    // Check if we should try system clipboard
+    const hasSystemClipboard = clipboardData && clipboardData.isSystemClipboard;
+
+    // Try system clipboard first if available
+    if (hasSystemClipboard) {
+        try {
+            const response = await fetch('/paste-from-system-clipboard', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    device: device,
+                    target_path: targetPathOrCategory,
+                    slot: slot
+                })
+            });
+
+            if (response.ok) {
+                // Success - refresh the view
+                if (device === 'opz') {
+                    await fetchOpzSamples();
+                } else {
+                    await fetchOp1Samples();
+                }
+                toast.success('Sample pasted from system clipboard');
+                return;
+            }
+        } catch (err) {
+            console.warn('System clipboard paste failed, trying internal:', err);
+        }
+    }
+
+    // Fall back to internal clipboard paste
+    if (!clipboardData || !clipboardData.path) {
+        toast.error('No sample in clipboard');
+        return;
+    }
+
+    try {
+        const response = await fetch('/paste-sample', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                device: device,
+                source_path: clipboardData.path,
+                target_path: targetPathOrCategory,
+                slot: slot
+            })
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to paste');
+        }
+
+        // Success - refresh the view
+        if (device === 'opz') {
+            await fetchOpzSamples();
+        } else {
+            await fetchOp1Samples();
+        }
+
+        toast.success('Sample pasted successfully');
+    } catch (err) {
+        console.error('Paste failed:', err);
+        toast.error(err.message);
+    }
+}
+
+/**
+ * Update paste button states based on clipboard
+ */
+async function updatePasteButtonStates() {
+    // Check both internal and system clipboard
+    let hasClipboard = clipboardData && clipboardData.path;
+
+    // Also check system clipboard if no internal clipboard
+    if (!hasClipboard) {
+        try {
+            const response = await fetch('/check-system-clipboard');
+            if (response.ok) {
+                const data = await response.json();
+                hasClipboard = data.has_file;
+                if (hasClipboard) {
+                    // Update internal state to indicate system clipboard has file
+                    clipboardData = {
+                        path: null,  // Path unknown until paste
+                        device: currentDevice,
+                        isSystemClipboard: true
+                    };
+                }
+            }
+        } catch (err) {
+            // Silent fail - just use internal clipboard state
+        }
+    }
+
+    const pasteItems = document.querySelectorAll('.paste-item');
+    pasteItems.forEach(item => {
+        if (hasClipboard) {
+            item.classList.remove('disabled');
+        } else {
+            item.classList.add('disabled');
+        }
+    });
+}
+
+/**
+ * Start periodic system clipboard monitoring
+ */
+function startClipboardMonitoring() {
+    // Check clipboard every 2 seconds
+    if (clipboardCheckInterval) {
+        clearInterval(clipboardCheckInterval);
+    }
+
+    clipboardCheckInterval = setInterval(async () => {
+        // Only check if no internal clipboard is set
+        if (!clipboardData || !clipboardData.path) {
+            await updatePasteButtonStates();
+        }
+    }, 2000);
+}
+
+/**
+ * Stop clipboard monitoring
+ */
+function stopClipboardMonitoring() {
+    if (clipboardCheckInterval) {
+        clearInterval(clipboardCheckInterval);
+        clipboardCheckInterval = null;
+    }
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+
+/**
+ * Get the currently selected/playing sample element and its data
+ */
+function getSelectedSample() {
+    const playingElement = document.querySelector('.sampleslot.playing, .op1-sample.playing');
+    if (!playingElement) return null;
+
+    // Extract path and filename from the element
+    let path = null;
+    let filename = null;
+
+    if (playingElement.classList.contains('sampleslot')) {
+        // OP-Z sample
+        const nameSpan = playingElement.querySelector('.sample-name');
+        if (nameSpan) {
+            const text = nameSpan.textContent;
+            const match = text.match(/Slot \d+: ([^(]+)/);
+            if (match) {
+                filename = match[1].trim();
+            }
+        }
+        // Get path from dataset or reconstruct
+        path = playingElement.dataset.path;
+    } else if (playingElement.classList.contains('op1-sample')) {
+        // OP-1 sample
+        const nameSpan = playingElement.querySelector('.sample-name');
+        if (nameSpan) {
+            filename = nameSpan.textContent;
+        }
+        path = playingElement.dataset.path;
+    }
+
+    return { element: playingElement, path: path || currentlyPlayingPath, filename };
+}
+
+/**
+ * Handle global keyboard shortcuts
+ */
+function handleKeyboardShortcut(e) {
+    // Don't trigger shortcuts if currently renaming
+    if (currentRenameElement) return;
+
+    // Don't trigger shortcuts if typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    const selected = getSelectedSample();
+    if (!selected) return;
+
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+    // Paste: Ctrl/Cmd+V (works on empty slots too)
+    if (modKey && e.key === 'v') {
+        e.preventDefault();
+        // Determine paste target based on selected element
+        if (selected.element.classList.contains('sampleslot')) {
+            const category = selected.element.dataset.category;
+            const slot = selected.element.dataset.slot;
+            if (category && slot !== undefined) {
+                pasteSample('opz', category, parseInt(slot));
+            }
+        } else {
+            // OP-1: paste to the same location (needs path)
+            if (selected.path) {
+                pasteSample('op1', selected.path);
+            }
+        }
+        return;
+    }
+
+    // Operations below require a path (copy/rename/delete)
+    if (!selected.path) return;
+
+    // Copy: Ctrl/Cmd+C
+    if (modKey && e.key === 'c') {
+        e.preventDefault();
+        copySample(selected.path);
+        return;
+    }
+
+    // Rename: F2 or Enter
+    if (e.key === 'F2' || (e.key === 'Enter' && !modKey)) {
+        e.preventDefault();
+        startRename(selected.element, selected.path, selected.filename);
+        return;
+    }
+
+    // Delete: Delete key
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSample(currentDevice, selected.path, currentDevice === 'opz' ? fetchOpzSamples : fetchOp1Samples);
+        return;
+    }
+}
+
+// Attach keyboard shortcut handler
+document.addEventListener('keydown', handleKeyboardShortcut);
+
+// Clear selection when clicking outside of samples
+document.addEventListener('click', (e) => {
+    // Don't clear if clicking on a sample, button, or dropdown
+    if (e.target.closest('.sampleslot') ||
+        e.target.closest('.op1-sample') ||
+        e.target.closest('.more-actions-btn') ||
+        e.target.closest('.delete-btn') ||
+        e.target.closest('.dropdown-menu')) {
+        return;
+    }
+
+    // Clear playback and selection
+    stopPlayback();
+});
+
+// ============================================
 // OP-Z Drag and Drop Setup
 // ============================================
 
@@ -869,6 +1494,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await saveSettings(settings);
         });
     }
+
+    // Start system clipboard monitoring
+    startClipboardMonitoring();
 
     document.querySelectorAll(".samplepackbox").forEach(box => {
         box.addEventListener("dragover", (e) => {

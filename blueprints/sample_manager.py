@@ -4,12 +4,14 @@ import uuid
 import html
 import werkzeug.utils
 import shutil
+import tempfile
 from flask import Blueprint, request, jsonify, current_app, send_file
 from .config import get_config_setting, get_device_mount_path
 from .sample_converter import convert_audio_file, UPLOAD_FOLDER
 from .utils import get_unique_filepath, run_ffmpeg
 from .devices import OP_Z, OP_1, get_device_by_id
 from .constants import Config, Directories, SampleTypes
+from .clipboard_utils import copy_file_to_clipboard, paste_file_from_clipboard, has_file_in_clipboard
 
 # Create Blueprint
 sample_manager_bp = Blueprint('sample_manager', __name__)
@@ -968,6 +970,326 @@ def delete_op1_subdirectory():
     except Exception as e:
         current_app.logger.error(f"Error deleting OP-1 subdirectory: {e}")
         return {"error": "Failed to delete folder"}, 500
+
+
+@sample_manager_bp.route("/rename-sample", methods=["POST"])
+def rename_sample():
+    """Rename a sample file."""
+    data = request.get_json()
+    device = data.get("device", get_config_setting(Config.SELECTED_DEVICE))
+    old_path = data.get("old_path")
+    new_name = data.get("new_name")
+
+    if not old_path or not new_name:
+        return {"error": "Missing old_path or new_name"}, 400
+
+    mount_path, device_name = get_device_config(device)
+
+    # Determine allowed base directory
+    if device == "op1":
+        allowed_base = mount_path
+    else:
+        allowed_base = os.path.join(mount_path, Directories.OPZ.SAMPLEPACKS)
+
+    # Validate old path is within allowed directory
+    is_valid, safe_old_path, error = validate_full_path(old_path, allowed_base)
+    if not is_valid:
+        return {"error": "Unauthorized path"}, 403
+
+    if not os.path.isfile(safe_old_path):
+        return {"error": "File not found"}, 404
+
+    # Validate new name
+    new_name = new_name.strip()
+    if not new_name:
+        return {"error": "Filename cannot be empty"}, 400
+
+    # Check length (10 characters max)
+    if len(new_name) > 10:
+        return {"error": "Filename must be 10 characters or less"}, 400
+
+    # Check allowed characters (alphanumeric, underscore, hyphen only)
+    if not all(c.isalnum() or c in ('_', '-') for c in new_name):
+        return {"error": "Invalid characters. Use only letters, numbers, hyphens, and underscores."}, 400
+
+    # Build new path with .aif extension
+    old_dir = os.path.dirname(safe_old_path)
+    old_filename = os.path.basename(safe_old_path)
+    old_ext = os.path.splitext(old_filename)[1]
+    new_filename = new_name + old_ext
+    new_path = os.path.join(old_dir, new_filename)
+
+    # Check if file with new name already exists
+    if os.path.exists(new_path):
+        return {"error": "A sample with this name already exists"}, 400
+
+    # OP-1: Check if in "user" directory (read-only)
+    if device == "op1":
+        rel_path = os.path.relpath(safe_old_path, mount_path)
+        parts = rel_path.split(os.sep)
+        if len(parts) >= 2 and parts[1] == Directories.OP1.USER:
+            return {"error": "Cannot rename files in 'user' directory"}, 403
+
+    try:
+        os.rename(safe_old_path, new_path)
+        return {"status": "renamed", "new_path": html.escape(new_path)}, 200
+    except Exception as e:
+        current_app.logger.error(f"Error renaming {device_name} file: {e}")
+        return {"error": "Failed to rename file"}, 500
+
+
+@sample_manager_bp.route("/paste-sample", methods=["POST"])
+def paste_sample():
+    """Paste/copy a sample from one location to another."""
+    data = request.get_json()
+    device = data.get("device", get_config_setting(Config.SELECTED_DEVICE))
+    source_path = data.get("source_path")
+    target_path = data.get("target_path")
+    slot = data.get("slot")
+
+    if not source_path:
+        return {"error": "Missing source_path"}, 400
+
+    mount_path, device_name = get_device_config(device)
+
+    # Determine allowed base directory
+    if device == "op1":
+        allowed_base = mount_path
+    else:
+        allowed_base = os.path.join(mount_path, Directories.OPZ.SAMPLEPACKS)
+
+    # Validate source path
+    is_valid, safe_source_path, error = validate_full_path(source_path, allowed_base)
+    if not is_valid:
+        return {"error": "Invalid source path"}, 403
+
+    if not os.path.isfile(safe_source_path):
+        return {"error": "Source file not found"}, 404
+
+    # Determine destination based on device
+    if device == "opz":
+        # OP-Z uses category and slot
+        category = target_path
+        if not category or slot is None:
+            return {"error": "Missing category or slot"}, 400
+
+        if category not in SAMPLE_CATEGORIES:
+            return {"error": "Invalid category"}, 400
+
+        samplepacks_base = os.path.join(mount_path, Directories.OPZ.SAMPLEPACKS)
+        is_valid, safe_target_dir, error = sanitize_and_validate_path(
+            samplepacks_base, category, f"{int(slot)+1:02d}"
+        )
+        if not is_valid:
+            return {"error": error}, 403
+    else:
+        # OP-1 uses target_path
+        if not target_path:
+            return {"error": "Missing target_path"}, 400
+
+        # Extract directory from target path
+        is_valid, safe_target_path, error = validate_full_path(target_path, allowed_base)
+        if not is_valid:
+            return {"error": "Invalid target path"}, 403
+
+        # If target is a file, use its directory
+        if os.path.isfile(safe_target_path):
+            safe_target_dir = os.path.dirname(safe_target_path)
+        else:
+            safe_target_dir = safe_target_path
+
+    os.makedirs(safe_target_dir, exist_ok=True)
+
+    # Build destination path
+    source_filename = os.path.basename(safe_source_path)
+    dest_path = os.path.join(safe_target_dir, source_filename)
+
+    # For OP-Z, delete existing files in slot (but not if source is in same slot)
+    if device == "opz":
+        source_dir = os.path.dirname(safe_source_path)
+        # Only delete if source is NOT in the target directory
+        if os.path.abspath(source_dir) != os.path.abspath(safe_target_dir):
+            for existing_file in os.listdir(safe_target_dir):
+                existing_path = os.path.join(safe_target_dir, existing_file)
+                if os.path.isfile(existing_path):
+                    os.remove(existing_path)
+        else:
+            # Source and target are the same - just return success
+            return {"status": "pasted", "path": html.escape(safe_source_path), "message": "Sample already in this slot"}, 200
+
+    try:
+        # Copy the file (don't move, so clipboard remains valid)
+        shutil.copy2(safe_source_path, dest_path)
+        return {"status": "pasted", "path": html.escape(dest_path)}, 200
+    except Exception as e:
+        current_app.logger.error(f"Error pasting {device_name} file: {e}")
+        return {"error": "Failed to paste file"}, 500
+
+
+@sample_manager_bp.route("/copy-to-system-clipboard", methods=["POST"])
+def copy_to_system_clipboard():
+    """Copy a sample file to the system clipboard."""
+    data = request.get_json()
+    device = data.get("device", get_config_setting(Config.SELECTED_DEVICE))
+    path = data.get("path")
+
+    if not path:
+        return {"error": "Missing path"}, 400
+
+    mount_path, device_name = get_device_config(device)
+
+    # Determine allowed base directory
+    if device == "op1":
+        allowed_base = mount_path
+    else:
+        allowed_base = os.path.join(mount_path, Directories.OPZ.SAMPLEPACKS)
+
+    # Validate path is within allowed directory
+    is_valid, safe_path, error = validate_full_path(path, allowed_base)
+    if not is_valid:
+        return {"error": "Unauthorized path"}, 403
+
+    if not os.path.isfile(safe_path):
+        return {"error": "File not found"}, 404
+
+    # Copy to system clipboard
+    success, error_msg = copy_file_to_clipboard(safe_path)
+
+    if success:
+        return {"status": "copied", "path": html.escape(safe_path)}, 200
+    else:
+        current_app.logger.error(f"Failed to copy to system clipboard: {error_msg}")
+        return {"error": error_msg or "Failed to copy to system clipboard"}, 500
+
+
+@sample_manager_bp.route("/paste-from-system-clipboard", methods=["POST"])
+def paste_from_system_clipboard():
+    """Paste a file from system clipboard to a device location."""
+    data = request.get_json()
+    device = data.get("device", get_config_setting(Config.SELECTED_DEVICE))
+    target_path = data.get("target_path")
+    slot = data.get("slot")
+
+    mount_path, device_name = get_device_config(device)
+
+    # Check if clipboard has a file
+    success, clipboard_path, error_msg = paste_file_from_clipboard(tempfile.gettempdir())
+
+    if not success or not clipboard_path:
+        return {"error": error_msg or "No file in clipboard"}, 400
+
+    # Validate it's an audio file
+    ext = os.path.splitext(clipboard_path)[1].lower()
+    audio_extensions = ['.aif', '.aiff', '.wav', '.mp3', '.flac', '.ogg', '.m4a']
+    if ext not in audio_extensions:
+        return {"error": "Clipboard does not contain an audio file"}, 400
+
+    # Determine destination based on device
+    if device == "opz":
+        # OP-Z uses category and slot
+        category = target_path
+        if not category or slot is None:
+            return {"error": "Missing category or slot"}, 400
+
+        if category not in SAMPLE_CATEGORIES:
+            return {"error": "Invalid category"}, 400
+
+        samplepacks_base = os.path.join(mount_path, Directories.OPZ.SAMPLEPACKS)
+        is_valid, safe_target_dir, error = sanitize_and_validate_path(
+            samplepacks_base, category, f"{int(slot)+1:02d}"
+        )
+        if not is_valid:
+            return {"error": error}, 403
+
+        sample_type = get_sample_type_from_category(category)
+        file_extension = ".aiff"
+        overwrite_existing = True
+    else:
+        # OP-1 uses target_path
+        if not target_path:
+            return {"error": "Missing target_path"}, 400
+
+        allowed_base = mount_path
+        is_valid, safe_target_path, error = validate_full_path(target_path, allowed_base)
+        if not is_valid:
+            return {"error": "Invalid target path"}, 403
+
+        # If target is a file, use its directory
+        if os.path.isfile(safe_target_path):
+            safe_target_dir = os.path.dirname(safe_target_path)
+            parent_folder = os.path.basename(os.path.dirname(safe_target_dir))
+        else:
+            safe_target_dir = safe_target_path
+            parent_folder = os.path.basename(os.path.dirname(safe_target_dir))
+
+        sample_type = SampleTypes.DRUM if parent_folder == Directories.OP1.DRUM else SampleTypes.SYNTH
+        file_extension = ".aif"
+        overwrite_existing = False
+
+    os.makedirs(safe_target_dir, exist_ok=True)
+
+    # Build destination path
+    original_filename = werkzeug.utils.secure_filename(os.path.basename(clipboard_path))
+    base_name = os.path.splitext(original_filename)[0]
+    final_filename = base_name + file_extension
+    dest_path = os.path.join(safe_target_dir, final_filename)
+
+    # OP-1: Avoid overwriting by adding counter
+    if not overwrite_existing:
+        dest_path = get_unique_filepath(dest_path)
+
+    temp_converted_path = None
+    upload_failed = False
+
+    try:
+        # For OP-Z, delete existing files in slot (but not if source is in same slot)
+        if overwrite_existing:
+            source_dir = os.path.dirname(clipboard_path)
+            # Only delete if source is NOT in the target directory
+            if os.path.abspath(source_dir) != os.path.abspath(safe_target_dir):
+                for existing_file in os.listdir(safe_target_dir):
+                    existing_path = os.path.join(safe_target_dir, existing_file)
+                    if os.path.isfile(existing_path):
+                        os.remove(existing_path)
+            else:
+                # Source and target are the same - just return success
+                return {"status": "pasted", "path": html.escape(clipboard_path), "message": "Sample already in this slot"}, 200
+
+        # Check if conversion is needed
+        needs_conversion = ext not in [".aif", ".aiff"]
+
+        if needs_conversion:
+            # Convert to temp file first
+            temp_converted_path = os.path.join(UPLOAD_FOLDER, str(uuid.uuid4()) + "_" + final_filename)
+            convert_audio_file(clipboard_path, temp_converted_path, sample_type)
+            # Copy converted file to device
+            shutil.copy2(temp_converted_path, dest_path)
+        else:
+            # Copy directly
+            shutil.copy2(clipboard_path, dest_path)
+
+        return {"status": "pasted", "path": html.escape(dest_path)}, 200
+
+    except subprocess.CalledProcessError as e:
+        upload_failed = True
+        current_app.logger.error(f"Conversion error: {e}")
+        return {"error": "Audio conversion failed"}, 500
+    except Exception as e:
+        upload_failed = True
+        current_app.logger.error(f"Paste from clipboard error: {e}")
+        return {"error": "Failed to paste from clipboard"}, 500
+    finally:
+        if temp_converted_path and os.path.exists(temp_converted_path):
+            os.remove(temp_converted_path)
+        if upload_failed and os.path.exists(dest_path):
+            os.remove(dest_path)
+
+
+@sample_manager_bp.route("/check-system-clipboard", methods=["GET"])
+def check_system_clipboard():
+    """Check if the system clipboard contains a file."""
+    has_file = has_file_in_clipboard()
+    return {"has_file": has_file}, 200
 
 
 @sample_manager_bp.route("/preview-sample")

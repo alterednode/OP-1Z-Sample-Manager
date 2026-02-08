@@ -1,11 +1,107 @@
+/* Action buttons */
+.more-actions-btn {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-left: 5px;
+    border-radius: 10px;
+    background-color: var(--offwhite);
+    color: var(--text-color);
+    border: 1px solid var(--background-color);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background-color 0.2s ease;
+}
+
+.more-actions-btn:hover {
+    background-color: #e8e8e8;
+}
+
 .delete-btn {
     display: inline-block;
+    padding: 4px 8px;
     margin-left: 5px;
     border-radius: 10px;
     background-color: var(--fourth-color);
     color: white;
     border: none;
     cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background-color 0.2s ease;
+}
+
+.delete-btn:hover {
+    background-color: #d32f2f;
+}
+
+/* Hide delete button on empty slots */
+.sampleslot.empty .delete-btn {
+    display: none;
+}
+
+/* Sample actions dropdown */
+.sample-actions-dropdown {
+    min-width: 120px;
+    z-index: 1050 !important;  /* Ensure dropdowns appear above all content */
+}
+
+.sample-actions-dropdown .dropdown-item {
+    cursor: pointer;
+    padding: 8px 16px;
+}
+
+.sample-actions-dropdown .dropdown-item:hover:not(.disabled) {
+    background-color: #f0f0f0;
+}
+
+.sample-actions-dropdown .dropdown-item.disabled {
+    color: #999;
+    cursor: not-allowed;
+}
+
+/* Inline rename input */
+.sample-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 4px;
+    border: 2px solid var(--second-color);
+    border-radius: 3px;
+    background-color: white;
+    font: inherit;
+    outline: none;
+}
+
+.sample-name-input:focus {
+    border-color: var(--first-color);
+}
+
+/* Hide buttons during rename */
+.sampleslot.renaming .more-actions-btn,
+.sampleslot.renaming .delete-btn {
+    display: none;
+}
+
+/* Disable drag during rename */
+.sampleslot.renaming {
+    cursor: default;
+}
+
+/* Button container for proper layout */
+.sample-buttons {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+/* OP-1 sample actions */
+.op1-sample .more-actions-btn {
+    margin-left: auto;
+}
+
+.op1-sample.empty .delete-btn {
+    display: none;
 }
 
 .sampleslot {
@@ -19,9 +115,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
 }
 
-.sampleslot span {
+.sampleslot .sample-name {
     flex: 1;
     min-width: 0;
     white-space: nowrap;
@@ -30,7 +127,11 @@
 }
 
 .sampleslot.filled {
-    background-color: #63cc73;
+    border-left: 5px solid var(--first-color);  /* OP-Z green indicator */
+}
+
+.sampleslot.tilde {
+    border-left: 5px solid var(--third-color);  /* OP-Z yellow indicator for tilde (symbolic link) samples */
 }
 
 .sampleslot.drag-hover {
@@ -233,7 +334,7 @@
 .op1-subdirectory {
     margin-bottom: 10px;
     border-radius: 8px;
-    overflow: hidden;
+    overflow: visible;  /* Allow dropdowns to escape */
     background-color: var(--offwhite);
 }
 
@@ -304,6 +405,7 @@
     padding: 10px 15px 15px 15px;
     background-color: white;
     border-top: 1px solid #e0e0e0;
+    overflow: visible;  /* Allow dropdowns to escape */
 }
 
 .subdirectory-content.collapsed {
@@ -319,6 +421,7 @@
     border-radius: 5px;
     margin-bottom: 6px;
     gap: 10px;
+    position: relative;
 }
 
 .op1-sample:last-child {
