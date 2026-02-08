@@ -238,6 +238,136 @@ function updateManualPathsVisibility(isEnabled) {
   }
 }
 
+/**
+ * Toggle between logged-in and logged-out UI states for OP1.fun
+ */
+function updateOp1FunLoginUI(isLoggedIn, email) {
+  const loggedOutDiv = document.getElementById('op1fun-logged-out');
+  const loggedInDiv = document.getElementById('op1fun-logged-in');
+  const emailSpan = document.getElementById('op1fun-user-email');
+
+  if (isLoggedIn && email) {
+    loggedOutDiv.style.display = 'none';
+    loggedInDiv.style.display = 'block';
+    emailSpan.textContent = email;
+  } else {
+    loggedOutDiv.style.display = 'block';
+    loggedInDiv.style.display = 'none';
+  }
+
+  lucide.createIcons();  // Reinitialize icons for newly visible elements
+}
+
+/**
+ * Check OP1.fun login status on page load
+ */
+async function loadOp1FunLoginState() {
+  try {
+    const res = await fetch('/get-config-setting?config_option=OP1FUN_USER_EMAIL');
+    const data = await res.json();
+    const email = data.config_value;
+
+    if (email) {
+      updateOp1FunLoginUI(true, email);
+    } else {
+      updateOp1FunLoginUI(false, null);
+    }
+  } catch (err) {
+    console.error('Error loading OP1.fun login state:', err);
+    updateOp1FunLoginUI(false, null);
+  }
+}
+
+/**
+ * Open OP1.fun login modal and pre-fill email if available
+ */
+async function openOp1FunLoginModal() {
+  // Pre-fill email if available
+  try {
+    const res = await fetch('/get-config-setting?config_option=OP1FUN_USER_EMAIL');
+    const data = await res.json();
+    if (data.config_value) {
+      document.getElementById('op1fun-email').value = data.config_value;
+    }
+  } catch (err) {
+    console.error('Error loading email:', err);
+  }
+
+  document.getElementById('op1fun-password').value = '';  // Always clear password
+
+  const modal = new bootstrap.Modal(document.getElementById('op1funLoginModal'));
+  modal.show();
+}
+
+/**
+ * Handle OP1.fun login form submission
+ */
+async function op1funLogin() {
+  const email = document.getElementById('op1fun-email').value.trim();
+  const password = document.getElementById('op1fun-password').value;
+  const loginBtn = document.getElementById('op1fun-login-btn');
+
+  // Validate
+  if (!email || !password) {
+    toast.error('Please enter both email and password', 'Validation Error');
+    return;
+  }
+
+  // Show loading state
+  loginBtn.disabled = true;
+  const originalText = loginBtn.textContent;
+  loginBtn.textContent = 'Logging in...';
+
+  try {
+    const response = await fetch('/integrations/op1fun/api_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      bootstrap.Modal.getInstance(document.getElementById('op1funLoginModal')).hide();
+      toast.success('You are now connected to OP1.fun', 'Login Successful');
+      updateOp1FunLoginUI(true, email);
+    } else {
+      const errorMessage = data.error || 'Invalid credentials';
+      toast.error(errorMessage, 'Login Failed');
+    }
+  } catch (err) {
+    console.error('Error during login:', err);
+    toast.error('Unable to connect to OP1.fun. Please check your internet connection.', 'Connection Error');
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = originalText;
+  }
+}
+
+/**
+ * Handle OP1.fun logout
+ */
+async function op1funLogout() {
+  try {
+    const response = await fetch('/integrations/op1fun/clear_auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      toast.success('Your account has been disconnected', 'Logged Out');
+      updateOp1FunLoginUI(false, null);
+    } else {
+      toast.error('Failed to log out', 'Error');
+    }
+  } catch (err) {
+    console.error('Error during logout:', err);
+    toast.error('Failed to log out', 'Error');
+  }
+}
+
 
 window.onload = function () {
   loadConfigPath("OPZ_MOUNT_PATH", "opz-path-holder");
@@ -245,6 +375,7 @@ window.onload = function () {
   loadConfigPath("WORKING_DIRECTORY", "working-dir-holder");
   loadLoggerLevel();
   loadDeveloperMode();
+  loadOp1FunLoginState();
 
   enableAutoResizeInput(document.getElementById("opz-path-holder"));
   enableAutoResizeInput(document.getElementById("op1-path-holder"));
