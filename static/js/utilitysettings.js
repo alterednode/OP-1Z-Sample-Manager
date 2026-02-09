@@ -329,11 +329,11 @@ async function op1funLogin() {
 
     if (response.ok && data.success) {
       bootstrap.Modal.getInstance(document.getElementById('op1funLoginModal')).hide();
-      toast.success('You are now connected to OP1.fun', 'Login Successful');
+      toast.success('You are now connected to OP1.fun', 'OP1.fun Login Successful');
       updateOp1FunLoginUI(true, email);
     } else {
       const errorMessage = data.error || 'Invalid credentials';
-      toast.error(errorMessage, 'Login Failed');
+      toast.error(errorMessage, 'OP1.fun Login Failed');
     }
   } catch (err) {
     console.error('Error during login:', err);
@@ -357,14 +357,14 @@ async function op1funLogout() {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      toast.success('Your account has been disconnected', 'Logged Out');
+      toast.success('Your account has been disconnected from OP1.fun', 'Logged Out');
       updateOp1FunLoginUI(false, null);
     } else {
-      toast.error('Failed to log out', 'Error');
+      toast.error('Failed to log out from OP1.fun', 'Error');
     }
   } catch (err) {
     console.error('Error during logout:', err);
-    toast.error('Failed to log out', 'Error');
+    toast.error('Failed to log out from OP1.fun', 'Error');
   }
 }
 
