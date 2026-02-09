@@ -221,7 +221,9 @@ async function refreshSamples() {
     if (currentDevice === 'opz') {
         await fetchOpzSamples();
     } else {
+        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
+        restoreExpandedFolders(expandedFolders);
     }
 }
 
@@ -619,6 +621,51 @@ async function fetchOp1Samples() {
     }
 }
 
+/**
+ * Captures the paths of currently expanded OP-1 folders
+ * @returns {Set<string>} Set of folder paths that are currently expanded
+ */
+function captureExpandedFolders() {
+    const expandedPaths = new Set();
+    const folders = document.querySelectorAll('.op1-subdirectory');
+
+    folders.forEach(folder => {
+        const content = folder.querySelector('.subdirectory-content');
+        // If content exists and is NOT collapsed, this folder is expanded
+        if (content && !content.classList.contains('collapsed')) {
+            const path = folder.dataset.path;
+            if (path) {
+                expandedPaths.add(path);
+            }
+        }
+    });
+
+    return expandedPaths;
+}
+
+/**
+ * Restores the expanded state of OP-1 folders after a refresh
+ * @param {Set<string>} paths - Set of folder paths that should be expanded
+ */
+function restoreExpandedFolders(paths) {
+    if (!paths || paths.size === 0) return;
+
+    paths.forEach(path => {
+        const folder = document.querySelector(`.op1-subdirectory[data-path="${path}"]`);
+        if (folder) {
+            const content = folder.querySelector('.subdirectory-content');
+            const icon = folder.querySelector('.expand-icon');
+
+            if (content) {
+                content.classList.remove('collapsed');
+            }
+            if (icon) {
+                icon.classList.add('expanded');
+            }
+        }
+    });
+}
+
 function renderOp1Section(parentFolder, subdirectories) {
     const container = document.getElementById(`op1-${parentFolder}-subdirectories`);
     if (!container) return;
@@ -910,7 +957,9 @@ function setupOp1SubdirectoryDropZone(subdirDiv, parentFolder, subdirName) {
         }
 
         // Refresh the view
+        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
+        restoreExpandedFolders(expandedFolders);
     });
 }
 
@@ -981,7 +1030,9 @@ function setupOp1SectionDropZone(parentFolder) {
                 toast.error(err.message, 'Upload Failed');
             }
 
+            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
+            restoreExpandedFolders(expandedFolders);
         }
     });
 }
@@ -1086,7 +1137,9 @@ async function createOp1Subdirectory(parentFolder) {
             throw new Error(data.error || 'Failed to create folder');
         }
 
+        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
+        restoreExpandedFolders(expandedFolders);
         toast.success('Folder created');
     } catch (err) {
         console.error('Failed to create subdirectory:', err);
@@ -1112,7 +1165,9 @@ async function renameOp1Subdirectory(path) {
             throw new Error(data.error || 'Failed to rename folder');
         }
 
+        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
+        restoreExpandedFolders(expandedFolders);
         toast.success('Folder renamed');
     } catch (err) {
         console.error('Failed to rename subdirectory:', err);
@@ -1140,7 +1195,9 @@ function deleteOp1Subdirectory(path) {
                     throw new Error(data.error || 'Failed to delete folder');
                 }
 
+                const expandedFolders = captureExpandedFolders();
                 await fetchOp1Samples();
+                restoreExpandedFolders(expandedFolders);
                 toast.success('Folder deleted');
             } catch (err) {
                 console.error('Failed to delete subdirectory:', err);
@@ -1269,7 +1326,9 @@ async function finishRename(element, path, newName, originalText, input) {
         if (currentDevice === 'opz') {
             await fetchOpzSamples();
         } else {
+            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
+            restoreExpandedFolders(expandedFolders);
         }
 
         toast.success('Sample renamed');
@@ -1373,7 +1432,9 @@ async function pasteSample(device, targetPathOrCategory, slot) {
                 if (device === 'opz') {
                     await fetchOpzSamples();
                 } else {
+                    const expandedFolders = captureExpandedFolders();
                     await fetchOp1Samples();
+                    restoreExpandedFolders(expandedFolders);
                 }
                 toast.success('Sample pasted from system clipboard');
                 return;
@@ -1410,7 +1471,9 @@ async function pasteSample(device, targetPathOrCategory, slot) {
         if (device === 'opz') {
             await fetchOpzSamples();
         } else {
+            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
+            restoreExpandedFolders(expandedFolders);
         }
 
         toast.success('Sample pasted successfully');
