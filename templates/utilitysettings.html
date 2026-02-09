@@ -27,6 +27,40 @@
 
 <hr>
 
+<!-- Working Directory -->
+<div>Set the working directory for exported samples and project backups</div>
+<input id="working-dir-holder" placeholder="Working directory goes here" style="min-width: 200px;"
+       onblur="setConfigPath('WORKING_DIRECTORY', 'working-dir-holder', 'working-dir-info')" />
+<button onclick="openPathPicker('/get-user-folder-path', 'working-dir-holder', 'working-dir-info', 'WORKING_DIRECTORY', true)" class="btn btn-warning">
+  Open Folder Browser
+</button>
+<p id="working-dir-info"></p>
+
+<hr>
+
+<!-- OP1.fun Integration -->
+<div id="op1fun-section" class="settings-section">
+    <!-- Logged Out State -->
+    <div id="op1fun-logged-out" style="display: none;">
+        <button onclick="openOp1FunLoginModal()" class="nav-btn nav-btn-primary">
+            <i data-lucide="log-in"></i>
+            Login to OP1.fun
+        </button>
+        <p class="toggle-description">OP1.fun is a community platform for OP-1 patches and samples. Connect your account to access your presets and packs.</p>
+    </div>
+
+    <!-- Logged In State -->
+    <div id="op1fun-logged-in" style="display: none;">
+        <p>Logged in as <span id="op1fun-user-email"></span></p>
+        <button onclick="op1funLogout()" class="nav-btn nav-btn-secondary">
+            <i data-lucide="log-out"></i>
+            Logout
+        </button>
+    </div>
+</div>
+
+<hr>
+
 <!-- Device Detection Mode -->
 <div class="settings-section">
     <div class="developer-mode-toggle">
@@ -77,16 +111,38 @@
     <p id="logger-info"></p>
 </div>
 
-<hr>
-
-<!-- Working Directory -->
-<div>Set the working directory for exported samples and project backups</div>
-<input id="working-dir-holder" placeholder="Working directory goes here" style="min-width: 200px;"
-       onblur="setConfigPath('WORKING_DIRECTORY', 'working-dir-holder', 'working-dir-info')" />
-<button onclick="openPathPicker('/get-user-folder-path', 'working-dir-holder', 'working-dir-info', 'WORKING_DIRECTORY', true)" class="btn btn-warning">
-  Open Folder Browser
-</button>
-<p id="working-dir-info"></p>
+<!-- OP1.fun Login Modal -->
+<div class="modal fade" id="op1funLoginModal" tabindex="-1" aria-labelledby="op1funLoginModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="op1funLoginModalLabel">Login to OP1.fun</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">OP1.fun is a community platform for OP-1 patches and samples. Connect your account to access your presets and packs.</p>
+                <p class="mb-3">
+                    Don't have an account?
+                    <a href="https://op1.fun" target="_blank" rel="noopener noreferrer">Sign up at op1.fun</a>
+                </p>
+                <form id="op1fun-login-form" onsubmit="event.preventDefault(); op1funLogin();">
+                    <div class="mb-3">
+                        <label for="op1fun-email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="op1fun-email" placeholder="your@email.com" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="op1fun-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="op1fun-password" placeholder="••••••••" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="op1fun-login-btn" onclick="op1funLogin()">Login</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="/static/js/utilitysettings.js"></script>
 {% endblock %}
