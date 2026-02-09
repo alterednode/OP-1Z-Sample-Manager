@@ -1087,6 +1087,10 @@ def paste_sample():
         if not target_path:
             return {"error": "Missing target_path"}, 400
 
+        # If target_path is relative, prepend the mount path to make it absolute
+        if not os.path.isabs(target_path):
+            target_path = os.path.join(allowed_base, target_path)
+
         # Extract directory from target path
         is_valid, safe_target_path, error = validate_full_path(target_path, allowed_base)
         if not is_valid:

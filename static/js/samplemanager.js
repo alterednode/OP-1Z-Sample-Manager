@@ -645,6 +645,9 @@ function renderOp1Section(parentFolder, subdirectories) {
         subdirDiv.classList.add('op1-subdirectory');
         if (isReadOnly) {
             subdirDiv.classList.add('read-only');
+            subdirDiv.classList.add('builtin-folder');  // Yellow border for built-in
+        } else {
+            subdirDiv.classList.add('custom-folder');   // Green border for custom
         }
         subdirDiv.dataset.path = `${parentFolder}/${subdirName}`;
 
@@ -669,13 +672,57 @@ function renderOp1Section(parentFolder, subdirectories) {
             <span class="expand-icon">▶</span>
             <span class="subdirectory-name">${escapeHtml(subdirName)}</span>
             <span class="sample-count">${countText}</span>
-            ${isReadOnly ? '<span class="read-only-badge">Read-only</span>' : `
-                <div class="subdirectory-actions">
-                    <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); renameOp1Subdirectory('${parentFolder}/${subdirName}')">Rename</button>
-                    <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteOp1Subdirectory('${parentFolder}/${subdirName}')">Delete</button>
-                </div>
-            `}
         `;
+
+        // Add read-only badge OR action buttons
+        if (isReadOnly) {
+            const badge = document.createElement('span');
+            badge.classList.add('read-only-badge');
+            badge.textContent = 'Read-only';
+            header.appendChild(badge);
+        } else {
+            // Create button container
+            const buttonContainer = document.createElement('div');
+            buttonContainer.classList.add('subdirectory-actions');
+
+            // More actions button (⋯)
+            const moreBtn = document.createElement('button');
+            moreBtn.innerHTML = '⋯';
+            moreBtn.classList.add('more-actions-btn');
+            moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+            moreBtn.setAttribute('aria-expanded', 'false');
+            moreBtn.onclick = (e) => e.stopPropagation();
+
+            // Dropdown menu
+            const dropdown = document.createElement('div');
+            dropdown.classList.add('dropdown-menu', 'folder-actions-dropdown');
+
+            // Rename option
+            const renameItem = document.createElement('a');
+            renameItem.classList.add('dropdown-item');
+            renameItem.textContent = 'Rename';
+            renameItem.onclick = (e) => {
+                e.stopPropagation();
+                renameOp1Subdirectory(`${parentFolder}/${subdirName}`);
+            };
+
+            dropdown.appendChild(renameItem);
+
+            // Delete button (✕)
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '✕';
+            deleteBtn.classList.add('delete-btn');
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteOp1Subdirectory(`${parentFolder}/${subdirName}`);
+            };
+
+            buttonContainer.appendChild(moreBtn);
+            buttonContainer.appendChild(dropdown);
+            buttonContainer.appendChild(deleteBtn);
+
+            header.appendChild(buttonContainer);
+        }
 
         // Toggle expand/collapse on header click
         header.addEventListener('click', () => {
@@ -690,7 +737,10 @@ function renderOp1Section(parentFolder, subdirectories) {
         content.classList.add('subdirectory-content', 'collapsed');
 
         if (files.length === 0) {
-            content.innerHTML = '<p class="empty-subdirectory">No files in this folder</p>';
+            const emptyMsg = document.createElement('p');
+            emptyMsg.classList.add('empty-subdirectory');
+            emptyMsg.textContent = 'No files in this folder';
+            content.appendChild(emptyMsg);
         } else {
             files.forEach(file => {
                 const fileDiv = document.createElement('div');
@@ -795,6 +845,12 @@ function renderOp1Section(parentFolder, subdirectories) {
 
                 content.appendChild(fileDiv);
             });
+        }
+
+        // Add empty slot for paste functionality (except in read-only folders)
+        if (!isReadOnly) {
+            const emptySlot = createEmptySlot(parentFolder, subdirName);
+            content.appendChild(emptySlot);
         }
 
         subdirDiv.appendChild(header);
@@ -945,6 +1001,73 @@ async function getFilesFromDirectory(directoryEntry) {
             resolve(files);
         });
     });
+}
+
+/**
+ * Creates an empty slot placeholder for OP-1 folders to enable paste functionality
+ * @param {string} parentFolder - "drum" or "synth"
+ * @param {string} subdirName - Folder name (e.g., "electronic")
+ * @returns {HTMLElement} Empty slot DOM element
+ */
+function createEmptySlot(parentFolder, subdirName) {
+    const emptySlot = document.createElement('div');
+    emptySlot.classList.add('op1-sample', 'empty');
+    emptySlot.dataset.path = `${parentFolder}/${subdirName}`;  // Folder path for paste target
+
+    // Name span showing "(empty)"
+    const nameSpan = document.createElement('span');
+    nameSpan.classList.add('sample-name', 'empty-slot-text');
+    nameSpan.textContent = '(empty)';
+
+    // Button container with only paste functionality
+    const buttonContainer = document.createElement('div');
+    buttonContainer.classList.add('sample-buttons');
+
+    // More actions button
+    const moreBtn = document.createElement('button');
+    moreBtn.innerHTML = '⋯';
+    moreBtn.classList.add('more-actions-btn');
+    moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+    moreBtn.setAttribute('data-bs-container', 'body');
+    moreBtn.setAttribute('aria-expanded', 'false');
+    moreBtn.onclick = (e) => e.stopPropagation();
+
+    // Dropdown menu with ONLY paste option
+    const dropdown = document.createElement('div');
+    dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
+
+    const pasteItem = document.createElement('a');
+    pasteItem.classList.add('dropdown-item', 'paste-item');
+    pasteItem.textContent = 'Paste';
+    pasteItem.onclick = () => {
+        if (currentRenameElement) return;
+        // Pass folder path as target - backend handles directory targets
+        pasteSample('op1', `${parentFolder}/${subdirName}`);
+    };
+
+    dropdown.appendChild(pasteItem);
+    buttonContainer.appendChild(moreBtn);
+    buttonContainer.appendChild(dropdown);
+
+    // Assemble empty slot
+    emptySlot.appendChild(nameSpan);
+    emptySlot.appendChild(buttonContainer);
+
+    // Click handler (select but don't play)
+    emptySlot.addEventListener('click', (e) => {
+        if (e.target.closest('.more-actions-btn') ||
+            e.target.closest('.dropdown-menu')) return;
+
+        stopPlayback();
+        currentlyPlayingPath = null;
+        if (currentlyPlayingElement) {
+            currentlyPlayingElement.classList.remove('playing');
+        }
+        currentlyPlayingElement = emptySlot;
+        emptySlot.classList.add('playing');
+    });
+
+    return emptySlot;
 }
 
 async function createOp1Subdirectory(parentFolder) {
