@@ -24,21 +24,6 @@ View the wiki here: [https://github.com/romangarms/OP-1Z-Sample-Manager/wiki](ht
 ![sample manager OP-Z](/screenshots/samplemanageropz.png)
 ![sample manager OP-Z](/screenshots/samplemanagerop1.png)
 
-### Sample Converter:
-![sample converter](/screenshots/sampleconverter.png)
-
-### Config File Editor:
-![config file editor](/screenshots/configeditoropz.png)
-
-### Tape Exporter:
-![tape exporter op1](/screenshots/tapeexport.png)
-
-### Backup and Restore:
-![Backup and Restore OP-1](/screenshots/backupandrestoreop1.png)
-
-### Utility Settings:
-![utility settings](/screenshots/utilitysettings.png)
-
 ## Third-Party Licenses
 
 For a complete list of third-party licenses, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
