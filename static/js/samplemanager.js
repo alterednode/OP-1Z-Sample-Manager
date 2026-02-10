@@ -60,6 +60,9 @@ let audioPlayer = null;
 let currentlyPlayingPath = null;
 let currentlyPlayingElement = null;
 
+// Refresh state
+let isRefreshing = false;
+
 // ============================================
 // Loading State Management
 // ============================================
@@ -217,13 +220,20 @@ async function openDirectory() {
     }
 }
 
-async function refreshSamples() {
-    if (currentDevice === 'opz') {
-        await fetchOpzSamples();
-    } else {
-        const expandedFolders = captureExpandedFolders();
-        await fetchOp1Samples();
-        restoreExpandedFolders(expandedFolders);
+async function refreshSamples(options = {}) {
+    if (isRefreshing) return;
+    isRefreshing = true;
+
+    const { showLoadingOverlay = true } = options;
+
+    try {
+        if (currentDevice === 'opz') {
+            await fetchOpzSamples({ showLoadingOverlay });
+        } else {
+            await fetchOp1Samples({ showLoadingOverlay });
+        }
+    } finally {
+        isRefreshing = false;
     }
 }
 
@@ -344,8 +354,236 @@ function deleteSample(device, path, refreshCallback) {
 // OP-Z Functions
 // ============================================
 
-async function fetchOpzSamples() {
-    showLoading('opz');
+/**
+ * Create a new OP-Z slot element with event handlers
+ * Handlers read from dataset to support in-place updates
+ */
+function createOpzSlotElement(category, slotIndex) {
+    const slotDiv = document.createElement("div");
+    slotDiv.classList.add("sampleslot");
+    slotDiv.setAttribute("draggable", "true");
+    slotDiv.id = `slot-${category}-${slotIndex}`;
+    slotDiv.dataset.category = category;
+    slotDiv.dataset.slot = slotIndex;
+
+    // Drag start - reads path from dataset
+    slotDiv.addEventListener("dragstart", (e) => {
+        if (currentRenameElement) {
+            e.preventDefault();
+            return;
+        }
+        e.dataTransfer.setData("text/plain", JSON.stringify({
+            category: slotDiv.dataset.category,
+            slot: parseInt(slotDiv.dataset.slot),
+            path: slotDiv.dataset.path
+        }));
+    });
+
+    slotDiv.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        slotDiv.classList.add("drag-hover");
+    });
+
+    slotDiv.addEventListener("dragleave", () => {
+        slotDiv.classList.remove("drag-hover");
+    });
+
+    // Drop handler - reads from dataset
+    slotDiv.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        slotDiv.classList.remove("drag-hover");
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            return;
+        }
+
+        const textData = e.dataTransfer.getData("text/plain");
+        if (!textData) return;
+
+        const droppedData = JSON.parse(textData);
+        const fromPath = droppedData.path;
+        const targetCategory = slotDiv.dataset.category;
+        const targetSlot = parseInt(slotDiv.dataset.slot);
+
+        if (!fromPath || (droppedData.category === targetCategory && droppedData.slot === targetSlot)) return;
+
+        const formData = new FormData();
+        formData.append("source_path", fromPath);
+        formData.append("target_category", targetCategory);
+        formData.append("target_slot", targetSlot);
+
+        try {
+            const response = await fetch("/move-sample", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Move failed");
+            await fetchOpzSamples();
+        } catch (err) {
+            console.error("Failed to move sample:", err);
+            toast.error("Could not move sample");
+        }
+    });
+
+    // Click handler - reads path from dataset
+    slotDiv.addEventListener('click', (e) => {
+        if (e.target.closest('.more-actions-btn') ||
+            e.target.closest('.delete-btn') ||
+            e.target.closest('.dropdown-menu')) return;
+
+        const path = slotDiv.dataset.path;
+        if (path) {
+            playSample(path, slotDiv);
+        } else {
+            stopPlayback();
+            currentlyPlayingPath = null;
+            currentlyPlayingElement = slotDiv;
+            slotDiv.classList.add('playing');
+        }
+    });
+
+    // Sample name span
+    const text = document.createElement("span");
+    text.classList.add('sample-name');
+    slotDiv.appendChild(text);
+
+    // Button container
+    const buttonContainer = document.createElement("div");
+    buttonContainer.classList.add("sample-buttons");
+
+    // More actions button
+    const moreBtn = document.createElement("button");
+    moreBtn.innerHTML = "⋯";
+    moreBtn.classList.add("more-actions-btn");
+    moreBtn.setAttribute("data-bs-toggle", "dropdown");
+    moreBtn.setAttribute("data-bs-container", "body");
+    moreBtn.setAttribute("aria-expanded", "false");
+
+    // Dropdown menu
+    const dropdown = document.createElement("div");
+    dropdown.classList.add("dropdown-menu", "sample-actions-dropdown");
+
+    const renameItem = document.createElement("a");
+    renameItem.classList.add("dropdown-item", "rename-item");
+    renameItem.textContent = "Rename";
+    renameItem.onclick = () => {
+        if (currentRenameElement) return;
+        const path = slotDiv.dataset.path;
+        const filename = slotDiv.dataset.filename;
+        if (path && filename) {
+            startRename(slotDiv, path, filename);
+        }
+    };
+
+    const copyItem = document.createElement("a");
+    copyItem.classList.add("dropdown-item", "copy-item");
+    copyItem.textContent = "Copy";
+    copyItem.onclick = () => {
+        if (currentRenameElement) return;
+        const path = slotDiv.dataset.path;
+        if (path) copySample(path);
+    };
+
+    const pasteItem = document.createElement("a");
+    pasteItem.classList.add("dropdown-item", "paste-item");
+    pasteItem.textContent = "Paste";
+    pasteItem.onclick = () => {
+        if (currentRenameElement) return;
+        pasteSample('opz', slotDiv.dataset.category, parseInt(slotDiv.dataset.slot));
+    };
+
+    dropdown.appendChild(renameItem);
+    dropdown.appendChild(copyItem);
+    dropdown.appendChild(pasteItem);
+
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "✕";
+    deleteBtn.classList.add("delete-btn");
+    deleteBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const samplePath = slotDiv.dataset.path;
+        if (!samplePath) return;
+        await deleteSample('opz', samplePath, fetchOpzSamples);
+    };
+
+    buttonContainer.appendChild(moreBtn);
+    buttonContainer.appendChild(dropdown);
+    buttonContainer.appendChild(deleteBtn);
+    slotDiv.appendChild(buttonContainer);
+
+    return slotDiv;
+}
+
+/**
+ * Update an existing OP-Z slot element in place
+ */
+function updateOpzSlotElement(slotDiv, slot, slotIndex) {
+    const filename = slot.filename || "(empty)";
+    const filesize = slot.filesize ? ` (${(slot.filesize / 1024).toFixed(1)} KB)` : "";
+    const isTilde = slot.filename && slot.filename.startsWith("~");
+    const isFilled = slot.path && typeof slot.filename === "string" && slot.filename !== "(empty)" && !isTilde;
+
+    // Update dataset
+    if (slot.path) {
+        slotDiv.dataset.path = slot.path;
+    } else {
+        delete slotDiv.dataset.path;
+    }
+    slotDiv.dataset.filename = slot.filename || "";
+
+    // Update classes
+    slotDiv.classList.remove('filled', 'empty', 'tilde');
+    if (isFilled) {
+        slotDiv.classList.add('filled');
+    } else if (isTilde) {
+        slotDiv.classList.add('tilde');
+    } else {
+        slotDiv.classList.add('empty');
+    }
+
+    // Update sample name text
+    const nameSpan = slotDiv.querySelector('.sample-name');
+    if (nameSpan) {
+        const newText = `Slot ${slotIndex + 1}: ${filename}${filesize}`;
+        if (nameSpan.textContent !== newText) {
+            nameSpan.textContent = newText;
+        }
+    }
+
+    // Update rename item disabled state
+    const renameItem = slotDiv.querySelector('.rename-item');
+    if (renameItem) {
+        if (isFilled) {
+            renameItem.classList.remove('disabled');
+        } else {
+            renameItem.classList.add('disabled');
+        }
+    }
+
+    // Update copy item disabled state
+    const copyItem = slotDiv.querySelector('.copy-item');
+    if (copyItem) {
+        if (isFilled || isTilde) {
+            copyItem.classList.remove('disabled');
+        } else {
+            copyItem.classList.add('disabled');
+        }
+    }
+
+    return isFilled;
+}
+
+async function fetchOpzSamples(options = {}) {
+    const { showLoadingOverlay = true } = options;
+
+    if (showLoadingOverlay) showLoading('opz');
+
+    // Capture scroll position
+    const scrollContainer = document.getElementById('opz-container');
+    const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
     try {
         const response = await fetch("/read-samples");
         if (!response.ok) {
@@ -379,194 +617,42 @@ async function fetchOpzSamples() {
         }
         opzNumSamples = 0;
 
+        // In-place update: create slots only if they don't exist, update otherwise
         data.categories.forEach((category, catIndex) => {
-            const container = document.getElementById(category);
-            if (!container) return;
-
-            const heading = container.querySelector("h3");
-            container.innerHTML = "";
-            if (heading) {
-                container.appendChild(heading);
-            }
+            const categoryContainer = document.getElementById(category);
+            if (!categoryContainer) return;
 
             data.sampleData[catIndex].forEach((slot, slotIndex) => {
-                const slotDiv = document.createElement("div");
-                slotDiv.classList.add("sampleslot");
-                slotDiv.setAttribute("draggable", "true");
-                slotDiv.dataset.category = category;
-                slotDiv.dataset.slot = slotIndex;
-                if (slot.path) {
-                    slotDiv.dataset.path = slot.path;
+                const slotId = `slot-${category}-${slotIndex}`;
+                let slotDiv = document.getElementById(slotId);
+
+                if (!slotDiv) {
+                    // First time: create element with event handlers
+                    slotDiv = createOpzSlotElement(category, slotIndex);
+                    categoryContainer.appendChild(slotDiv);
                 }
 
-                slotDiv.addEventListener("dragstart", (e) => {
-                    // Prevent drag during rename
-                    if (currentRenameElement) {
-                        e.preventDefault();
-                        return;
-                    }
-                    e.dataTransfer.setData("text/plain", JSON.stringify({
-                        category,
-                        slot: slotIndex,
-                        path: slot.path
-                    }));
-                });
-
-                slotDiv.addEventListener("dragover", (e) => {
-                    e.preventDefault();
-                    slotDiv.classList.add("drag-hover");
-                });
-
-                slotDiv.addEventListener("dragleave", () => {
-                    slotDiv.classList.remove("drag-hover");
-                });
-
-                slotDiv.addEventListener("drop", async (e) => {
-                    e.preventDefault();
-                    slotDiv.classList.remove("drag-hover");
-
-                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                        return;
-                    }
-
-                    const textData = e.dataTransfer.getData("text/plain");
-                    if (!textData) return;
-
-                    const droppedData = JSON.parse(textData);
-                    const fromPath = droppedData.path;
-
-                    if (!fromPath || (droppedData.category === category && droppedData.slot == slotIndex)) return;
-
-                    const formData = new FormData();
-                    formData.append("source_path", fromPath);
-                    formData.append("target_category", category);
-                    formData.append("target_slot", slotIndex);
-
-                    try {
-                        const response = await fetch("/move-sample", {
-                            method: "POST",
-                            body: formData
-                        });
-
-                        if (!response.ok) throw new Error("Move failed");
-                        await fetchOpzSamples();
-                    } catch (err) {
-                        console.error("Failed to move sample:", err);
-                        toast.error("Could not move sample");
-                    }
-                });
-
-                const filename = slot.filename || "(empty)";
-                const filesize = slot.filesize ? ` (${(slot.filesize / 1024).toFixed(1)} KB)` : "";
-                const isTilde = slot.filename && slot.filename.startsWith("~");
-                const isFilled = slot.path && typeof slot.filename === "string" && slot.filename !== "(empty)" && !isTilde;
-
+                // Update the slot content in place
+                const isFilled = updateOpzSlotElement(slotDiv, slot, slotIndex);
                 if (isFilled) {
                     opzNumSamples++;
-                    slotDiv.classList.add('filled');
-                } else if (isTilde) {
-                    slotDiv.classList.add('tilde');
-                } else {
-                    slotDiv.classList.add('empty');
                 }
-
-                updateStorageDisplay('opz', data.storage, { numSamples: opzNumSamples });
-
-                const text = document.createElement("span");
-                text.classList.add('sample-name');
-                text.textContent = `Slot ${slotIndex + 1}: ${filename}${filesize}`;
-
-                // Button container
-                const buttonContainer = document.createElement("div");
-                buttonContainer.classList.add("sample-buttons");
-
-                // More actions button (always visible)
-                const moreBtn = document.createElement("button");
-                moreBtn.innerHTML = "⋯";
-                moreBtn.classList.add("more-actions-btn");
-                moreBtn.setAttribute("data-bs-toggle", "dropdown");
-                moreBtn.setAttribute("data-bs-container", "body");
-                moreBtn.setAttribute("aria-expanded", "false");
-
-                // Dropdown menu
-                const dropdown = document.createElement("div");
-                dropdown.classList.add("dropdown-menu", "sample-actions-dropdown");
-
-                const renameItem = document.createElement("a");
-                renameItem.classList.add("dropdown-item");
-                renameItem.textContent = "Rename";
-                renameItem.onclick = () => {
-                    if (currentRenameElement) return;
-                    startRename(slotDiv, slot.path, slot.filename);
-                };
-                if (!isFilled) renameItem.classList.add("disabled");
-
-                const copyItem = document.createElement("a");
-                copyItem.classList.add("dropdown-item");
-                copyItem.textContent = "Copy";
-                copyItem.onclick = () => {
-                    if (currentRenameElement) return;
-                    copySample(slot.path);
-                };
-                if (!isFilled && !isTilde) copyItem.classList.add("disabled");
-
-                const pasteItem = document.createElement("a");
-                pasteItem.classList.add("dropdown-item", "paste-item");
-                pasteItem.textContent = "Paste";
-                pasteItem.onclick = () => {
-                    if (currentRenameElement) return;
-                    pasteSample('opz', category, slotIndex);
-                };
-                // Paste state will be updated by clipboard monitoring
-
-                dropdown.appendChild(renameItem);
-                dropdown.appendChild(copyItem);
-                dropdown.appendChild(pasteItem);
-
-                // Delete button (only visible on filled slots via CSS)
-                const deleteBtn = document.createElement("button");
-                deleteBtn.textContent = "✕";
-                deleteBtn.classList.add("delete-btn");
-                deleteBtn.onclick = async (e) => {
-                    e.stopPropagation();
-                    const samplePath = slot.path;
-                    if (!samplePath) return;
-                    await deleteSample('opz', samplePath, fetchOpzSamples);
-                };
-
-                // Add click handler for ALL slots (including empty ones)
-                slotDiv.addEventListener('click', (e) => {
-                    // Don't play if clicking buttons or dropdown
-                    if (e.target.closest('.more-actions-btn') ||
-                        e.target.closest('.delete-btn') ||
-                        e.target.closest('.dropdown-menu')) return;
-
-                    if (slot.path) {
-                        // For filled slots, play audio
-                        playSample(slot.path, slotDiv);
-                    } else {
-                        // For empty slots, just select without playing
-                        stopPlayback();
-                        currentlyPlayingPath = null;
-                        currentlyPlayingElement = slotDiv;
-                        slotDiv.classList.add('playing');
-                    }
-                });
-
-                buttonContainer.appendChild(moreBtn);
-                buttonContainer.appendChild(dropdown);
-                buttonContainer.appendChild(deleteBtn);
-
-                slotDiv.appendChild(text);
-                slotDiv.appendChild(buttonContainer);
-                container.appendChild(slotDiv);
             });
         });
+
+        // Update storage display after counting samples
+        updateStorageDisplay('opz', data.storage, { numSamples: opzNumSamples });
 
     } catch (error) {
         console.error("Failed to fetch OP-Z samples:", error);
     } finally {
-        hideLoading('opz');
+        if (showLoadingOverlay) hideLoading('opz');
+
+        // Restore scroll position
+        if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
+        }
+
         // Update paste button states after rendering
         await updatePasteButtonStates();
     }
@@ -577,8 +663,15 @@ async function fetchOpzSamples() {
 // OP-1 Functions
 // ============================================
 
-async function fetchOp1Samples() {
-    showLoading('op1');
+async function fetchOp1Samples(options = {}) {
+    const { showLoadingOverlay = true } = options;
+
+    if (showLoadingOverlay) showLoading('op1');
+
+    // Capture scroll position
+    const scrollContainer = document.getElementById('op1-container');
+    const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
     try {
         const response = await fetch("/read-op1-samples");
         if (!response.ok) {
@@ -603,10 +696,10 @@ async function fetchOp1Samples() {
         if (storageInfo) storageInfo.hidden = false;
         if (fileList) fileList.hidden = false;
 
-        // Render drum subdirectories
+        // Render drum subdirectories (in-place updates)
         renderOp1Section('drum', op1Data.drum.subdirectories);
 
-        // Render synth subdirectories
+        // Render synth subdirectories (in-place updates)
         renderOp1Section('synth', op1Data.synth.subdirectories);
 
         // Update storage display
@@ -615,90 +708,243 @@ async function fetchOp1Samples() {
     } catch (error) {
         console.error("Failed to fetch OP-1 samples:", error);
     } finally {
-        hideLoading('op1');
+        if (showLoadingOverlay) hideLoading('op1');
+
+        // Restore scroll position
+        if (scrollContainer) {
+            scrollContainer.scrollTop = scrollTop;
+        }
+
         // Update paste button states after rendering
         await updatePasteButtonStates();
     }
 }
 
 /**
- * Captures the paths of currently expanded OP-1 folders
- * @returns {Set<string>} Set of folder paths that are currently expanded
+ * Create an OP-1 file element with event handlers that read from dataset
  */
-function captureExpandedFolders() {
-    const expandedPaths = new Set();
-    const folders = document.querySelectorAll('.op1-subdirectory');
+function createOp1FileElement(parentFolder, subdirName, isReadOnly) {
+    const fileDiv = document.createElement('div');
+    fileDiv.classList.add('op1-sample', 'filled');
 
-    folders.forEach(folder => {
-        const content = folder.querySelector('.subdirectory-content');
-        // If content exists and is NOT collapsed, this folder is expanded
-        if (content && !content.classList.contains('collapsed')) {
-            const path = folder.dataset.path;
-            if (path) {
-                expandedPaths.add(path);
-            }
-        }
+    // Sample name
+    const nameSpan = document.createElement('span');
+    nameSpan.classList.add('sample-name');
+    fileDiv.appendChild(nameSpan);
+
+    // Size badge
+    const sizeSpan = document.createElement('span');
+    sizeSpan.classList.add('sample-size');
+    fileDiv.appendChild(sizeSpan);
+
+    // Type badge
+    const typeBadge = document.createElement('span');
+    typeBadge.classList.add('sample-type-badge');
+    fileDiv.appendChild(typeBadge);
+
+    // Button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.classList.add('sample-buttons');
+
+    if (!isReadOnly) {
+        // More actions button
+        const moreBtn = document.createElement('button');
+        moreBtn.innerHTML = '⋯';
+        moreBtn.classList.add('more-actions-btn');
+        moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+        moreBtn.setAttribute('data-bs-container', 'body');
+        moreBtn.setAttribute('aria-expanded', 'false');
+
+        // Dropdown menu
+        const dropdown = document.createElement('div');
+        dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
+
+        const renameItem = document.createElement('a');
+        renameItem.classList.add('dropdown-item');
+        renameItem.textContent = 'Rename';
+        renameItem.onclick = () => {
+            if (currentRenameElement) return;
+            startRename(fileDiv, fileDiv.dataset.path, fileDiv.dataset.filename);
+        };
+
+        const copyItem = document.createElement('a');
+        copyItem.classList.add('dropdown-item');
+        copyItem.textContent = 'Copy';
+        copyItem.onclick = () => {
+            if (currentRenameElement) return;
+            copySample(fileDiv.dataset.path);
+        };
+
+        const pasteItem = document.createElement('a');
+        pasteItem.classList.add('dropdown-item', 'paste-item');
+        pasteItem.textContent = 'Paste';
+        pasteItem.onclick = () => {
+            if (currentRenameElement) return;
+            pasteSample('op1', fileDiv.dataset.path);
+        };
+
+        dropdown.appendChild(renameItem);
+        dropdown.appendChild(copyItem);
+        dropdown.appendChild(pasteItem);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '✕';
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteSample('op1', fileDiv.dataset.path, fetchOp1Samples);
+        };
+
+        buttonContainer.appendChild(moreBtn);
+        buttonContainer.appendChild(dropdown);
+        buttonContainer.appendChild(deleteBtn);
+        fileDiv.appendChild(buttonContainer);
+    }
+
+    // Add click handler for audio preview (reads from dataset)
+    fileDiv.addEventListener('click', (e) => {
+        if (e.target.closest('.more-actions-btn') ||
+            e.target.closest('.delete-btn') ||
+            e.target.closest('.dropdown-menu')) return;
+        playSample(fileDiv.dataset.path, fileDiv);
     });
 
-    return expandedPaths;
+    return fileDiv;
 }
 
 /**
- * Restores the expanded state of OP-1 folders after a refresh
- * @param {Set<string>} paths - Set of folder paths that should be expanded
+ * Update an OP-1 file element in place
  */
-function restoreExpandedFolders(paths) {
-    if (!paths || paths.size === 0) return;
+function updateOp1FileElement(fileDiv, file) {
+    fileDiv.dataset.path = file.path;
+    fileDiv.dataset.filename = file.name;
+    fileDiv.id = `op1-file-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-    paths.forEach(path => {
-        const folder = document.querySelector(`.op1-subdirectory[data-path="${path}"]`);
-        if (folder) {
-            const content = folder.querySelector('.subdirectory-content');
-            const icon = folder.querySelector('.expand-icon');
+    const sizeKB = (file.size / 1024).toFixed(1);
+    const isPatch = file.category === 'patch';
 
-            if (content) {
-                content.classList.remove('collapsed');
-            }
-            if (icon) {
-                icon.classList.add('expanded');
-            }
-        }
-    });
-}
-
-function renderOp1Section(parentFolder, subdirectories) {
-    const container = document.getElementById(`op1-${parentFolder}-subdirectories`);
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    const sortedSubdirs = Object.keys(subdirectories).sort((a, b) => {
-        // Put "user" at the end
-        if (a === 'user') return 1;
-        if (b === 'user') return -1;
-        return a.localeCompare(b);
-    });
-
-    if (sortedSubdirs.length === 0) {
-        container.innerHTML = '<p class="empty-subdirectory">No folders yet. Click "+ Add Folder" to create one.</p>';
-        return;
+    const nameSpan = fileDiv.querySelector('.sample-name');
+    if (nameSpan && nameSpan.textContent !== file.name) {
+        nameSpan.textContent = file.name;
     }
 
-    sortedSubdirs.forEach(subdirName => {
-        const files = subdirectories[subdirName];
-        const isReadOnly = subdirName === 'user';
-
-        const subdirDiv = document.createElement('div');
-        subdirDiv.classList.add('op1-subdirectory');
-        if (isReadOnly) {
-            subdirDiv.classList.add('read-only');
-            subdirDiv.classList.add('builtin-folder');  // Yellow border for built-in
-        } else {
-            subdirDiv.classList.add('custom-folder');   // Green border for custom
+    const sizeSpan = fileDiv.querySelector('.sample-size');
+    if (sizeSpan) {
+        const newSize = `${sizeKB} KB`;
+        if (sizeSpan.textContent !== newSize) {
+            sizeSpan.textContent = newSize;
         }
-        subdirDiv.dataset.path = `${parentFolder}/${subdirName}`;
+    }
 
-        // Count samples and patches
+    const typeBadge = fileDiv.querySelector('.sample-type-badge');
+    if (typeBadge) {
+        typeBadge.classList.remove('patch', 'sample');
+        typeBadge.classList.add(isPatch ? 'patch' : 'sample');
+        typeBadge.textContent = isPatch ? 'patch' : 'sample';
+    }
+}
+
+/**
+ * Create an OP-1 subdirectory element with event handlers
+ */
+function createOp1SubdirectoryElement(parentFolder, subdirName, isReadOnly) {
+    const subdirDiv = document.createElement('div');
+    subdirDiv.classList.add('op1-subdirectory');
+    subdirDiv.id = `op1-folder-${parentFolder}-${subdirName}`;
+    subdirDiv.dataset.path = `${parentFolder}/${subdirName}`;
+
+    if (isReadOnly) {
+        subdirDiv.classList.add('read-only', 'builtin-folder');
+    } else {
+        subdirDiv.classList.add('custom-folder');
+    }
+
+    // Header
+    const header = document.createElement('div');
+    header.classList.add('subdirectory-header');
+    header.innerHTML = `
+        <span class="expand-icon">▶</span>
+        <span class="subdirectory-name">${escapeHtml(subdirName)}</span>
+        <span class="sample-count"></span>
+    `;
+
+    // Add read-only badge OR action buttons
+    if (isReadOnly) {
+        const badge = document.createElement('span');
+        badge.classList.add('read-only-badge');
+        badge.textContent = 'Read-only';
+        header.appendChild(badge);
+    } else {
+        const buttonContainer = document.createElement('div');
+        buttonContainer.classList.add('subdirectory-actions');
+
+        const moreBtn = document.createElement('button');
+        moreBtn.innerHTML = '⋯';
+        moreBtn.classList.add('more-actions-btn');
+        moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+        moreBtn.setAttribute('aria-expanded', 'false');
+        moreBtn.onclick = (e) => e.stopPropagation();
+
+        const dropdown = document.createElement('div');
+        dropdown.classList.add('dropdown-menu', 'folder-actions-dropdown');
+
+        const renameItem = document.createElement('a');
+        renameItem.classList.add('dropdown-item');
+        renameItem.textContent = 'Rename';
+        renameItem.onclick = (e) => {
+            e.stopPropagation();
+            renameOp1Subdirectory(subdirDiv.dataset.path);
+        };
+        dropdown.appendChild(renameItem);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '✕';
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteOp1Subdirectory(subdirDiv.dataset.path);
+        };
+
+        buttonContainer.appendChild(moreBtn);
+        buttonContainer.appendChild(dropdown);
+        buttonContainer.appendChild(deleteBtn);
+        header.appendChild(buttonContainer);
+    }
+
+    // Toggle expand/collapse on header click
+    header.addEventListener('click', () => {
+        const content = subdirDiv.querySelector('.subdirectory-content');
+        const icon = header.querySelector('.expand-icon');
+        content.classList.toggle('collapsed');
+        icon.classList.toggle('expanded');
+    });
+
+    subdirDiv.appendChild(header);
+
+    // Content (file list) - starts collapsed
+    const content = document.createElement('div');
+    content.classList.add('subdirectory-content', 'collapsed');
+    subdirDiv.appendChild(content);
+
+    // Add drag-and-drop support (not for read-only)
+    if (!isReadOnly) {
+        setupOp1SubdirectoryDropZone(subdirDiv, parentFolder, subdirName);
+    }
+
+    return subdirDiv;
+}
+
+/**
+ * Update folder content in place - reconcile files
+ */
+function updateOp1SubdirectoryContent(subdirDiv, parentFolder, subdirName, files, isReadOnly) {
+    const content = subdirDiv.querySelector('.subdirectory-content');
+    if (!content) return;
+
+    // Update sample count in header
+    const countSpan = subdirDiv.querySelector('.sample-count');
+    if (countSpan) {
         const sampleCount = files.filter(f => f.category !== 'patch').length;
         const patchCount = files.filter(f => f.category === 'patch').length;
 
@@ -711,207 +957,150 @@ function renderOp1Section(parentFolder, subdirectories) {
             if (patchCount > 0) parts.push(`${patchCount} patch${patchCount !== 1 ? 'es' : ''}`);
             countText = parts.length > 0 ? `(${parts.join(', ')})` : '(empty)';
         }
-
-        // Header
-        const header = document.createElement('div');
-        header.classList.add('subdirectory-header');
-        header.innerHTML = `
-            <span class="expand-icon">▶</span>
-            <span class="subdirectory-name">${escapeHtml(subdirName)}</span>
-            <span class="sample-count">${countText}</span>
-        `;
-
-        // Add read-only badge OR action buttons
-        if (isReadOnly) {
-            const badge = document.createElement('span');
-            badge.classList.add('read-only-badge');
-            badge.textContent = 'Read-only';
-            header.appendChild(badge);
-        } else {
-            // Create button container
-            const buttonContainer = document.createElement('div');
-            buttonContainer.classList.add('subdirectory-actions');
-
-            // More actions button (⋯)
-            const moreBtn = document.createElement('button');
-            moreBtn.innerHTML = '⋯';
-            moreBtn.classList.add('more-actions-btn');
-            moreBtn.setAttribute('data-bs-toggle', 'dropdown');
-            moreBtn.setAttribute('aria-expanded', 'false');
-            moreBtn.onclick = (e) => e.stopPropagation();
-
-            // Dropdown menu
-            const dropdown = document.createElement('div');
-            dropdown.classList.add('dropdown-menu', 'folder-actions-dropdown');
-
-            // Rename option
-            const renameItem = document.createElement('a');
-            renameItem.classList.add('dropdown-item');
-            renameItem.textContent = 'Rename';
-            renameItem.onclick = (e) => {
-                e.stopPropagation();
-                renameOp1Subdirectory(`${parentFolder}/${subdirName}`);
-            };
-
-            dropdown.appendChild(renameItem);
-
-            // Delete button (✕)
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '✕';
-            deleteBtn.classList.add('delete-btn');
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                deleteOp1Subdirectory(`${parentFolder}/${subdirName}`);
-            };
-
-            buttonContainer.appendChild(moreBtn);
-            buttonContainer.appendChild(dropdown);
-            buttonContainer.appendChild(deleteBtn);
-
-            header.appendChild(buttonContainer);
+        if (countSpan.textContent !== countText) {
+            countSpan.textContent = countText;
         }
+    }
 
-        // Toggle expand/collapse on header click
-        header.addEventListener('click', () => {
-            const content = subdirDiv.querySelector('.subdirectory-content');
-            const icon = header.querySelector('.expand-icon');
-            content.classList.toggle('collapsed');
-            icon.classList.toggle('expanded');
-        });
-
-        // Content (file list)
-        const content = document.createElement('div');
-        content.classList.add('subdirectory-content', 'collapsed');
-
-        if (files.length === 0) {
-            const emptyMsg = document.createElement('p');
-            emptyMsg.classList.add('empty-subdirectory');
-            emptyMsg.textContent = 'No files in this folder';
-            content.appendChild(emptyMsg);
-        } else {
-            files.forEach(file => {
-                const fileDiv = document.createElement('div');
-                fileDiv.classList.add('op1-sample');
-                fileDiv.classList.add('filled'); // OP-1 files are always filled
-                fileDiv.dataset.path = file.path;
-
-                const sizeKB = (file.size / 1024).toFixed(1);
-                const isPatch = file.category === 'patch';
-                const badgeClass = isPatch ? 'patch' : 'sample';
-                const badgeText = isPatch ? 'patch' : 'sample';
-
-                // Sample name
-                const nameSpan = document.createElement('span');
-                nameSpan.classList.add('sample-name');
-                nameSpan.textContent = file.name;
-
-                // Size badge
-                const sizeSpan = document.createElement('span');
-                sizeSpan.classList.add('sample-size');
-                sizeSpan.textContent = `${sizeKB} KB`;
-
-                // Type badge
-                const typeBadge = document.createElement('span');
-                typeBadge.classList.add('sample-type-badge', badgeClass);
-                typeBadge.textContent = badgeText;
-
-                // Button container
-                const buttonContainer = document.createElement('div');
-                buttonContainer.classList.add('sample-buttons');
-
-                if (!isReadOnly) {
-                    // More actions button
-                    const moreBtn = document.createElement('button');
-                    moreBtn.innerHTML = '⋯';
-                    moreBtn.classList.add('more-actions-btn');
-                    moreBtn.setAttribute('data-bs-toggle', 'dropdown');
-                    moreBtn.setAttribute('data-bs-container', 'body');
-                    moreBtn.setAttribute('aria-expanded', 'false');
-
-                    // Dropdown menu
-                    const dropdown = document.createElement('div');
-                    dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
-
-                    const renameItem = document.createElement('a');
-                    renameItem.classList.add('dropdown-item');
-                    renameItem.textContent = 'Rename';
-                    renameItem.onclick = () => {
-                        if (currentRenameElement) return;
-                        startRename(fileDiv, file.path, file.name);
-                    };
-
-                    const copyItem = document.createElement('a');
-                    copyItem.classList.add('dropdown-item');
-                    copyItem.textContent = 'Copy';
-                    copyItem.onclick = () => {
-                        if (currentRenameElement) return;
-                        copySample(file.path);
-                    };
-
-                    const pasteItem = document.createElement('a');
-                    pasteItem.classList.add('dropdown-item', 'paste-item');
-                    pasteItem.textContent = 'Paste';
-                    pasteItem.onclick = () => {
-                        if (currentRenameElement) return;
-                        pasteSample('op1', file.path);
-                    };
-
-                    dropdown.appendChild(renameItem);
-                    dropdown.appendChild(copyItem);
-                    dropdown.appendChild(pasteItem);
-
-                    // Delete button
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.textContent = '✕';
-                    deleteBtn.classList.add('delete-btn');
-                    deleteBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        deleteSample('op1', file.path, fetchOp1Samples);
-                    };
-
-                    buttonContainer.appendChild(moreBtn);
-                    buttonContainer.appendChild(dropdown);
-                    buttonContainer.appendChild(deleteBtn);
-                }
-
-                // Add click handler for audio preview
-                fileDiv.addEventListener('click', (e) => {
-                    // Don't play if clicking buttons or dropdown
-                    if (e.target.closest('.more-actions-btn') ||
-                        e.target.closest('.delete-btn') ||
-                        e.target.closest('.dropdown-menu')) return;
-                    playSample(file.path, fileDiv);
-                });
-
-                fileDiv.appendChild(nameSpan);
-                fileDiv.appendChild(sizeSpan);
-                fileDiv.appendChild(typeBadge);
-                if (!isReadOnly) {
-                    fileDiv.appendChild(buttonContainer);
-                }
-
-                content.appendChild(fileDiv);
-            });
-        }
-
-        // Add empty slot for paste functionality (except in read-only folders)
-        if (!isReadOnly) {
-            const emptySlot = createEmptySlot(parentFolder, subdirName);
-            content.appendChild(emptySlot);
-        }
-
-        subdirDiv.appendChild(header);
-        subdirDiv.appendChild(content);
-        container.appendChild(subdirDiv);
-
-        // Add drag-and-drop support for files (not for read-only directories)
-        if (!isReadOnly) {
-            setupOp1SubdirectoryDropZone(subdirDiv, parentFolder, subdirName);
+    // Build map of existing file elements by path
+    const existingFiles = new Map();
+    content.querySelectorAll('.op1-sample.filled').forEach(el => {
+        if (el.dataset.path) {
+            existingFiles.set(el.dataset.path, el);
         }
     });
 
-    // Set up drop zone for the whole section (for folder uploads)
-    setupOp1SectionDropZone(parentFolder);
+    // Track which paths are in new data
+    const newPaths = new Set(files.map(f => f.path));
+
+    // Remove files that no longer exist
+    existingFiles.forEach((el, path) => {
+        if (!newPaths.has(path)) {
+            el.remove();
+        }
+    });
+
+    // Remove empty message if files exist, add if no files
+    const emptyMsg = content.querySelector('.empty-subdirectory');
+    if (files.length === 0) {
+        if (!emptyMsg) {
+            const msg = document.createElement('p');
+            msg.classList.add('empty-subdirectory');
+            msg.textContent = 'No files in this folder';
+            // Insert before empty slot if exists
+            const emptySlot = content.querySelector('.op1-sample.empty');
+            if (emptySlot) {
+                content.insertBefore(msg, emptySlot);
+            } else {
+                content.appendChild(msg);
+            }
+        }
+    } else {
+        if (emptyMsg) {
+            emptyMsg.remove();
+        }
+    }
+
+    // Update or create file elements
+    const emptySlot = content.querySelector('.op1-sample.empty');
+    files.forEach(file => {
+        let fileDiv = existingFiles.get(file.path);
+
+        if (!fileDiv) {
+            // Create new file element
+            fileDiv = createOp1FileElement(parentFolder, subdirName, isReadOnly);
+            // Insert before empty slot
+            if (emptySlot) {
+                content.insertBefore(fileDiv, emptySlot);
+            } else {
+                content.appendChild(fileDiv);
+            }
+        }
+
+        // Update the file element
+        updateOp1FileElement(fileDiv, file);
+    });
+
+    // Ensure empty slot exists for non-read-only folders
+    if (!isReadOnly && !emptySlot) {
+        const newEmptySlot = createEmptySlot(parentFolder, subdirName);
+        content.appendChild(newEmptySlot);
+    }
+}
+
+function renderOp1Section(parentFolder, subdirectories) {
+    const container = document.getElementById(`op1-${parentFolder}-subdirectories`);
+    if (!container) return;
+
+    const sortedSubdirs = Object.keys(subdirectories).sort((a, b) => {
+        if (a === 'user') return 1;
+        if (b === 'user') return -1;
+        return a.localeCompare(b);
+    });
+
+    // Handle empty state
+    if (sortedSubdirs.length === 0) {
+        container.innerHTML = '<p class="empty-subdirectory">No folders yet. Click "+ Add Folder" to create one.</p>';
+        return;
+    }
+
+    // Remove the "no folders" message if it exists
+    const noFoldersMsg = container.querySelector('p.empty-subdirectory');
+    if (noFoldersMsg) {
+        noFoldersMsg.remove();
+    }
+
+    // Build map of existing folder elements
+    const existingFolders = new Map();
+    container.querySelectorAll('.op1-subdirectory').forEach(el => {
+        if (el.dataset.path) {
+            existingFolders.set(el.dataset.path, el);
+        }
+    });
+
+    // Track which folder paths are in new data
+    const newPaths = new Set(sortedSubdirs.map(name => `${parentFolder}/${name}`));
+
+    // Remove folders that no longer exist
+    existingFolders.forEach((el, path) => {
+        if (!newPaths.has(path)) {
+            el.remove();
+        }
+    });
+
+    // Update or create folder elements in sorted order
+    let previousElement = null;
+    sortedSubdirs.forEach(subdirName => {
+        const folderPath = `${parentFolder}/${subdirName}`;
+        const files = subdirectories[subdirName];
+        const isReadOnly = subdirName === 'user';
+
+        let subdirDiv = existingFolders.get(folderPath);
+
+        if (!subdirDiv) {
+            // Create new folder element
+            subdirDiv = createOp1SubdirectoryElement(parentFolder, subdirName, isReadOnly);
+
+            // Insert in correct position
+            if (previousElement) {
+                previousElement.after(subdirDiv);
+            } else {
+                container.prepend(subdirDiv);
+            }
+        }
+
+        // Update folder content
+        updateOp1SubdirectoryContent(subdirDiv, parentFolder, subdirName, files, isReadOnly);
+
+        previousElement = subdirDiv;
+    });
+
+    // Set up drop zone for the whole section (only once on first render)
+    // Check if already set up by looking for a data attribute
+    if (!container.dataset.dropzoneSetup) {
+        setupOp1SectionDropZone(parentFolder);
+        container.dataset.dropzoneSetup = 'true';
+    }
 }
 
 function setupOp1SubdirectoryDropZone(subdirDiv, parentFolder, subdirName) {
@@ -956,10 +1145,8 @@ function setupOp1SubdirectoryDropZone(subdirDiv, parentFolder, subdirName) {
             }
         }
 
-        // Refresh the view
-        const expandedFolders = captureExpandedFolders();
+        // Refresh the view (in-place updates preserve folder state)
         await fetchOp1Samples();
-        restoreExpandedFolders(expandedFolders);
     });
 }
 
@@ -1030,9 +1217,7 @@ function setupOp1SectionDropZone(parentFolder) {
                 toast.error(err.message, 'Upload Failed');
             }
 
-            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
-            restoreExpandedFolders(expandedFolders);
         }
     });
 }
@@ -1137,9 +1322,7 @@ async function createOp1Subdirectory(parentFolder) {
             throw new Error(data.error || 'Failed to create folder');
         }
 
-        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
-        restoreExpandedFolders(expandedFolders);
         toast.success('Folder created');
     } catch (err) {
         console.error('Failed to create subdirectory:', err);
@@ -1165,9 +1348,7 @@ async function renameOp1Subdirectory(path) {
             throw new Error(data.error || 'Failed to rename folder');
         }
 
-        const expandedFolders = captureExpandedFolders();
         await fetchOp1Samples();
-        restoreExpandedFolders(expandedFolders);
         toast.success('Folder renamed');
     } catch (err) {
         console.error('Failed to rename subdirectory:', err);
@@ -1195,9 +1376,7 @@ function deleteOp1Subdirectory(path) {
                     throw new Error(data.error || 'Failed to delete folder');
                 }
 
-                const expandedFolders = captureExpandedFolders();
                 await fetchOp1Samples();
-                restoreExpandedFolders(expandedFolders);
                 toast.success('Folder deleted');
             } catch (err) {
                 console.error('Failed to delete subdirectory:', err);
@@ -1326,9 +1505,7 @@ async function finishRename(element, path, newName, originalText, input) {
         if (currentDevice === 'opz') {
             await fetchOpzSamples();
         } else {
-            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
-            restoreExpandedFolders(expandedFolders);
         }
 
         toast.success('Sample renamed');
@@ -1432,9 +1609,7 @@ async function pasteSample(device, targetPathOrCategory, slot) {
                 if (device === 'opz') {
                     await fetchOpzSamples();
                 } else {
-                    const expandedFolders = captureExpandedFolders();
                     await fetchOp1Samples();
-                    restoreExpandedFolders(expandedFolders);
                 }
                 toast.success('Sample pasted from system clipboard');
                 return;
@@ -1471,9 +1646,7 @@ async function pasteSample(device, targetPathOrCategory, slot) {
         if (device === 'opz') {
             await fetchOpzSamples();
         } else {
-            const expandedFolders = captureExpandedFolders();
             await fetchOp1Samples();
-            restoreExpandedFolders(expandedFolders);
         }
 
         toast.success('Sample pasted successfully');
@@ -1737,4 +1910,12 @@ window.addEventListener("dragover", (e) => {
 
 window.addEventListener("drop", (e) => {
     e.preventDefault();
+});
+
+// Auto-refresh when window regains focus
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        // Use subtle refresh (no loading overlay) for auto-refresh
+        refreshSamples({ showLoadingOverlay: false });
+    }
 });
