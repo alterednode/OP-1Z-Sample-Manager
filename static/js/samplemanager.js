@@ -142,6 +142,193 @@ function playSample(path, element) {
 }
 
 // ============================================
+// Shared UI Component Factories
+// ============================================
+
+/**
+ * Create a click handler for sample/slot elements that handles audio preview
+ * @param {HTMLElement} element - The element to attach the handler to
+ * @param {Object} options - Options for the click handler
+ * @param {boolean} options.allowEmptySelection - Whether to allow selection of empty slots
+ */
+function createSampleClickHandler(element, options = {}) {
+    const { allowEmptySelection = true } = options;
+
+    return (e) => {
+        // Don't trigger if clicking on buttons or dropdowns
+        if (e.target.closest('.more-actions-btn') ||
+            e.target.closest('.delete-btn') ||
+            e.target.closest('.dropdown-menu')) return;
+
+        const path = element.dataset.path;
+        if (path) {
+            playSample(path, element);
+        } else if (allowEmptySelection) {
+            // For empty slots, just select without playing
+            stopPlayback();
+            currentlyPlayingPath = null;
+            currentlyPlayingElement = element;
+            element.classList.add('playing');
+        }
+    };
+}
+
+/**
+ * Create a dropdown menu with action items
+ * @param {Array} actions - Array of action objects { label, className, handler, disabled }
+ * @returns {HTMLElement} The dropdown menu element
+ */
+function createActionDropdown(actions) {
+    const dropdown = document.createElement('div');
+    dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
+
+    actions.forEach(action => {
+        const item = document.createElement('a');
+        item.classList.add('dropdown-item');
+        if (action.className) item.classList.add(action.className);
+        item.textContent = action.label;
+        item.onclick = action.handler;
+        if (action.disabled) item.classList.add('disabled');
+        dropdown.appendChild(item);
+    });
+
+    return dropdown;
+}
+
+/**
+ * Create the "more actions" button (⋯) for dropdown triggers
+ * @param {Object} options - Options for the button
+ * @param {boolean} options.stopPropagation - Whether to stop click propagation
+ * @returns {HTMLElement} The more actions button
+ */
+function createMoreActionsButton(options = {}) {
+    const moreBtn = document.createElement('button');
+    moreBtn.innerHTML = '⋯';
+    moreBtn.classList.add('more-actions-btn');
+    moreBtn.setAttribute('data-bs-toggle', 'dropdown');
+    moreBtn.setAttribute('data-bs-container', 'body');
+    moreBtn.setAttribute('aria-expanded', 'false');
+
+    if (options.stopPropagation) {
+        moreBtn.onclick = (e) => e.stopPropagation();
+    }
+
+    return moreBtn;
+}
+
+/**
+ * Create a delete button (✕)
+ * @param {Function} onDelete - Callback when delete is clicked
+ * @returns {HTMLElement} The delete button
+ */
+function createDeleteButton(onDelete) {
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '✕';
+    deleteBtn.classList.add('delete-btn');
+    deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        onDelete();
+    };
+    return deleteBtn;
+}
+
+/**
+ * Create a complete button container with more actions, dropdown, and optional delete
+ * @param {HTMLElement} element - The parent element (for dataset access)
+ * @param {string} deviceType - 'opz' or 'op1'
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.showRename - Show rename option (default: true)
+ * @param {boolean} options.showCopy - Show copy option (default: true)
+ * @param {boolean} options.showPaste - Show paste option (default: true)
+ * @param {boolean} options.showDelete - Show delete button (default: true)
+ * @param {Function} options.refreshCallback - Callback after delete
+ * @param {Function} options.getPasteTarget - Custom function to get paste target
+ * @param {boolean} options.stopPropagation - Stop propagation on more button click
+ * @returns {HTMLElement} The button container
+ */
+function createSampleButtonContainer(element, deviceType, options = {}) {
+    const {
+        showRename = true,
+        showCopy = true,
+        showPaste = true,
+        showDelete = true,
+        refreshCallback,
+        getPasteTarget,
+        stopPropagation = false
+    } = options;
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.classList.add('sample-buttons');
+
+    // More actions button
+    const moreBtn = createMoreActionsButton({ stopPropagation });
+
+    // Build actions array
+    const actions = [];
+
+    if (showRename) {
+        actions.push({
+            label: 'Rename',
+            className: 'rename-item',
+            handler: () => {
+                if (currentRenameElement) return;
+                const path = element.dataset.path;
+                const filename = element.dataset.filename;
+                if (path && filename) {
+                    startRename(element, path, filename);
+                }
+            }
+        });
+    }
+
+    if (showCopy) {
+        actions.push({
+            label: 'Copy',
+            className: 'copy-item',
+            handler: () => {
+                if (currentRenameElement) return;
+                const path = element.dataset.path;
+                if (path) copySample(path);
+            }
+        });
+    }
+
+    if (showPaste) {
+        actions.push({
+            label: 'Paste',
+            className: 'paste-item',
+            handler: () => {
+                if (currentRenameElement) return;
+                if (getPasteTarget) {
+                    const target = getPasteTarget();
+                    pasteSample(deviceType, target.path, target.slot);
+                } else {
+                    pasteSample(deviceType, element.dataset.path);
+                }
+            }
+        });
+    }
+
+    const dropdown = createActionDropdown(actions);
+
+    buttonContainer.appendChild(moreBtn);
+    buttonContainer.appendChild(dropdown);
+
+    // Delete button
+    if (showDelete) {
+        const deleteBtn = createDeleteButton(() => {
+            const path = element.dataset.path;
+            if (path) {
+                deleteSample(deviceType, path, refreshCallback);
+            }
+        });
+        buttonContainer.appendChild(deleteBtn);
+    }
+
+    return buttonContainer;
+}
+
+// ============================================
 // Device Tab Management
 // ============================================
 
@@ -426,91 +613,22 @@ function createOpzSlotElement(category, slotIndex) {
         }
     });
 
-    // Click handler - reads path from dataset
-    slotDiv.addEventListener('click', (e) => {
-        if (e.target.closest('.more-actions-btn') ||
-            e.target.closest('.delete-btn') ||
-            e.target.closest('.dropdown-menu')) return;
-
-        const path = slotDiv.dataset.path;
-        if (path) {
-            playSample(path, slotDiv);
-        } else {
-            stopPlayback();
-            currentlyPlayingPath = null;
-            currentlyPlayingElement = slotDiv;
-            slotDiv.classList.add('playing');
-        }
-    });
+    // Click handler - using shared factory
+    slotDiv.addEventListener('click', createSampleClickHandler(slotDiv, { allowEmptySelection: true }));
 
     // Sample name span
     const text = document.createElement("span");
     text.classList.add('sample-name');
     slotDiv.appendChild(text);
 
-    // Button container
-    const buttonContainer = document.createElement("div");
-    buttonContainer.classList.add("sample-buttons");
-
-    // More actions button
-    const moreBtn = document.createElement("button");
-    moreBtn.innerHTML = "⋯";
-    moreBtn.classList.add("more-actions-btn");
-    moreBtn.setAttribute("data-bs-toggle", "dropdown");
-    moreBtn.setAttribute("data-bs-container", "body");
-    moreBtn.setAttribute("aria-expanded", "false");
-
-    // Dropdown menu
-    const dropdown = document.createElement("div");
-    dropdown.classList.add("dropdown-menu", "sample-actions-dropdown");
-
-    const renameItem = document.createElement("a");
-    renameItem.classList.add("dropdown-item", "rename-item");
-    renameItem.textContent = "Rename";
-    renameItem.onclick = () => {
-        if (currentRenameElement) return;
-        const path = slotDiv.dataset.path;
-        const filename = slotDiv.dataset.filename;
-        if (path && filename) {
-            startRename(slotDiv, path, filename);
-        }
-    };
-
-    const copyItem = document.createElement("a");
-    copyItem.classList.add("dropdown-item", "copy-item");
-    copyItem.textContent = "Copy";
-    copyItem.onclick = () => {
-        if (currentRenameElement) return;
-        const path = slotDiv.dataset.path;
-        if (path) copySample(path);
-    };
-
-    const pasteItem = document.createElement("a");
-    pasteItem.classList.add("dropdown-item", "paste-item");
-    pasteItem.textContent = "Paste";
-    pasteItem.onclick = () => {
-        if (currentRenameElement) return;
-        pasteSample('opz', slotDiv.dataset.category, parseInt(slotDiv.dataset.slot));
-    };
-
-    dropdown.appendChild(renameItem);
-    dropdown.appendChild(copyItem);
-    dropdown.appendChild(pasteItem);
-
-    // Delete button
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "✕";
-    deleteBtn.classList.add("delete-btn");
-    deleteBtn.onclick = async (e) => {
-        e.stopPropagation();
-        const samplePath = slotDiv.dataset.path;
-        if (!samplePath) return;
-        await deleteSample('opz', samplePath, fetchOpzSamples);
-    };
-
-    buttonContainer.appendChild(moreBtn);
-    buttonContainer.appendChild(dropdown);
-    buttonContainer.appendChild(deleteBtn);
+    // Button container - using shared factory
+    const buttonContainer = createSampleButtonContainer(slotDiv, 'opz', {
+        refreshCallback: fetchOpzSamples,
+        getPasteTarget: () => ({
+            path: slotDiv.dataset.category,
+            slot: parseInt(slotDiv.dataset.slot)
+        })
+    });
     slotDiv.appendChild(buttonContainer);
 
     return slotDiv;
@@ -742,73 +860,16 @@ function createOp1FileElement(parentFolder, subdirName, isReadOnly) {
     typeBadge.classList.add('sample-type-badge');
     fileDiv.appendChild(typeBadge);
 
-    // Button container
-    const buttonContainer = document.createElement('div');
-    buttonContainer.classList.add('sample-buttons');
-
+    // Button container - using shared factory (only for non-read-only)
     if (!isReadOnly) {
-        // More actions button
-        const moreBtn = document.createElement('button');
-        moreBtn.innerHTML = '⋯';
-        moreBtn.classList.add('more-actions-btn');
-        moreBtn.setAttribute('data-bs-toggle', 'dropdown');
-        moreBtn.setAttribute('data-bs-container', 'body');
-        moreBtn.setAttribute('aria-expanded', 'false');
-
-        // Dropdown menu
-        const dropdown = document.createElement('div');
-        dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
-
-        const renameItem = document.createElement('a');
-        renameItem.classList.add('dropdown-item');
-        renameItem.textContent = 'Rename';
-        renameItem.onclick = () => {
-            if (currentRenameElement) return;
-            startRename(fileDiv, fileDiv.dataset.path, fileDiv.dataset.filename);
-        };
-
-        const copyItem = document.createElement('a');
-        copyItem.classList.add('dropdown-item');
-        copyItem.textContent = 'Copy';
-        copyItem.onclick = () => {
-            if (currentRenameElement) return;
-            copySample(fileDiv.dataset.path);
-        };
-
-        const pasteItem = document.createElement('a');
-        pasteItem.classList.add('dropdown-item', 'paste-item');
-        pasteItem.textContent = 'Paste';
-        pasteItem.onclick = () => {
-            if (currentRenameElement) return;
-            pasteSample('op1', fileDiv.dataset.path);
-        };
-
-        dropdown.appendChild(renameItem);
-        dropdown.appendChild(copyItem);
-        dropdown.appendChild(pasteItem);
-
-        // Delete button
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '✕';
-        deleteBtn.classList.add('delete-btn');
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
-            deleteSample('op1', fileDiv.dataset.path, fetchOp1Samples);
-        };
-
-        buttonContainer.appendChild(moreBtn);
-        buttonContainer.appendChild(dropdown);
-        buttonContainer.appendChild(deleteBtn);
+        const buttonContainer = createSampleButtonContainer(fileDiv, 'op1', {
+            refreshCallback: fetchOp1Samples
+        });
         fileDiv.appendChild(buttonContainer);
     }
 
-    // Add click handler for audio preview (reads from dataset)
-    fileDiv.addEventListener('click', (e) => {
-        if (e.target.closest('.more-actions-btn') ||
-            e.target.closest('.delete-btn') ||
-            e.target.closest('.dropdown-menu')) return;
-        playSample(fileDiv.dataset.path, fileDiv);
-    });
+    // Click handler - using shared factory (OP-1 files are always filled, no empty selection)
+    fileDiv.addEventListener('click', createSampleClickHandler(fileDiv, { allowEmptySelection: false }));
 
     return fileDiv;
 }
@@ -879,32 +940,24 @@ function createOp1SubdirectoryElement(parentFolder, subdirName, isReadOnly) {
         const buttonContainer = document.createElement('div');
         buttonContainer.classList.add('subdirectory-actions');
 
-        const moreBtn = document.createElement('button');
-        moreBtn.innerHTML = '⋯';
-        moreBtn.classList.add('more-actions-btn');
-        moreBtn.setAttribute('data-bs-toggle', 'dropdown');
-        moreBtn.setAttribute('aria-expanded', 'false');
-        moreBtn.onclick = (e) => e.stopPropagation();
+        // More actions button - using shared factory
+        const moreBtn = createMoreActionsButton({ stopPropagation: true });
 
-        const dropdown = document.createElement('div');
-        dropdown.classList.add('dropdown-menu', 'folder-actions-dropdown');
+        // Folder-specific dropdown (only Rename option)
+        const dropdown = createActionDropdown([{
+            label: 'Rename',
+            handler: (e) => {
+                if (e) e.stopPropagation();
+                renameOp1Subdirectory(subdirDiv.dataset.path);
+            }
+        }]);
+        dropdown.classList.remove('sample-actions-dropdown');
+        dropdown.classList.add('folder-actions-dropdown');
 
-        const renameItem = document.createElement('a');
-        renameItem.classList.add('dropdown-item');
-        renameItem.textContent = 'Rename';
-        renameItem.onclick = (e) => {
-            e.stopPropagation();
-            renameOp1Subdirectory(subdirDiv.dataset.path);
-        };
-        dropdown.appendChild(renameItem);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '✕';
-        deleteBtn.classList.add('delete-btn');
-        deleteBtn.onclick = (e) => {
-            e.stopPropagation();
+        // Delete button - using shared factory
+        const deleteBtn = createDeleteButton(() => {
             deleteOp1Subdirectory(subdirDiv.dataset.path);
-        };
+        });
 
         buttonContainer.appendChild(moreBtn);
         buttonContainer.appendChild(dropdown);
@@ -1254,54 +1307,20 @@ function createEmptySlot(parentFolder, subdirName) {
     const nameSpan = document.createElement('span');
     nameSpan.classList.add('sample-name', 'empty-slot-text');
     nameSpan.textContent = '(empty)';
-
-    // Button container with only paste functionality
-    const buttonContainer = document.createElement('div');
-    buttonContainer.classList.add('sample-buttons');
-
-    // More actions button
-    const moreBtn = document.createElement('button');
-    moreBtn.innerHTML = '⋯';
-    moreBtn.classList.add('more-actions-btn');
-    moreBtn.setAttribute('data-bs-toggle', 'dropdown');
-    moreBtn.setAttribute('data-bs-container', 'body');
-    moreBtn.setAttribute('aria-expanded', 'false');
-    moreBtn.onclick = (e) => e.stopPropagation();
-
-    // Dropdown menu with ONLY paste option
-    const dropdown = document.createElement('div');
-    dropdown.classList.add('dropdown-menu', 'sample-actions-dropdown');
-
-    const pasteItem = document.createElement('a');
-    pasteItem.classList.add('dropdown-item', 'paste-item');
-    pasteItem.textContent = 'Paste';
-    pasteItem.onclick = () => {
-        if (currentRenameElement) return;
-        // Pass folder path as target - backend handles directory targets
-        pasteSample('op1', `${parentFolder}/${subdirName}`);
-    };
-
-    dropdown.appendChild(pasteItem);
-    buttonContainer.appendChild(moreBtn);
-    buttonContainer.appendChild(dropdown);
-
-    // Assemble empty slot
     emptySlot.appendChild(nameSpan);
+
+    // Button container - using shared factory (only paste, no rename/copy/delete)
+    const buttonContainer = createSampleButtonContainer(emptySlot, 'op1', {
+        showRename: false,
+        showCopy: false,
+        showPaste: true,
+        showDelete: false,
+        stopPropagation: true
+    });
     emptySlot.appendChild(buttonContainer);
 
-    // Click handler (select but don't play)
-    emptySlot.addEventListener('click', (e) => {
-        if (e.target.closest('.more-actions-btn') ||
-            e.target.closest('.dropdown-menu')) return;
-
-        stopPlayback();
-        currentlyPlayingPath = null;
-        if (currentlyPlayingElement) {
-            currentlyPlayingElement.classList.remove('playing');
-        }
-        currentlyPlayingElement = emptySlot;
-        emptySlot.classList.add('playing');
-    });
+    // Click handler - using shared factory (allows empty selection)
+    emptySlot.addEventListener('click', createSampleClickHandler(emptySlot, { allowEmptySelection: true }));
 
     return emptySlot;
 }
@@ -1770,11 +1789,18 @@ function handleKeyboardShortcut(e) {
     // Don't trigger shortcuts if typing in an input field
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-    const selected = getSelectedSample();
-    if (!selected) return;
-
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+    // Refresh: Ctrl/Cmd+R (doesn't require selection)
+    if (modKey && e.key === 'r') {
+        e.preventDefault();  // Prevent browser refresh
+        refreshSamples();
+        return;
+    }
+
+    const selected = getSelectedSample();
+    if (!selected) return;
 
     // Paste: Ctrl/Cmd+V (works on empty slots too)
     if (modKey && e.key === 'v') {
