@@ -508,7 +508,7 @@ async function fetchOpzSamples() {
                     if (currentRenameElement) return;
                     copySample(slot.path);
                 };
-                if (!isFilled) copyItem.classList.add("disabled");
+                if (!isFilled && !isTilde) copyItem.classList.add("disabled");
 
                 const pasteItem = document.createElement("a");
                 pasteItem.classList.add("dropdown-item", "paste-item");
