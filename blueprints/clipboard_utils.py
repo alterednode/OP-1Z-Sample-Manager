@@ -4,7 +4,6 @@ Supports copying and pasting audio files to/from system clipboard.
 """
 import sys
 import os
-import tempfile
 import subprocess
 from typing import Optional, Tuple
 
