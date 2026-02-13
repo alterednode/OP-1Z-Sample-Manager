@@ -45,6 +45,16 @@ class EnvVars:
 
 
 # ===================================================================
+# Environment Variable Names
+# ===================================================================
+
+class EnvVars:
+    """Environment variable names used for runtime overrides."""
+    CONFIG_DIR = "OP-1Z_SM_CONFIG_DIR"
+    WORKING_DIR = "OP-1Z_SM_WORKING_DIR"
+
+
+# ===================================================================
 # Directory Names
 # ===================================================================
 

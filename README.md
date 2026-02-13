@@ -1,20 +1,23 @@
 # OP-1Z Sample Manager
 
-**NEW: OP-1 Support Added! New Features!** Sample manager supports OP-1, plus tape track exporter and backup/restore feature
+**NEW: Version 2.x.x is out! New Features!** Sample manager supports OP-1, tape track exporter, backup/restore, auto device detection, and much more.
 
 This is a Flask app built to handle everything with samples on the OP-Z / OP-1. As time goes on, I'm adding more features around project management, export, and other various utilities.
 
+### [Download the app here](https://github.com/romangarms/OP-1Z-Sample-Manager/releases)
+
+### Using the App:
+Connect your device in disk mode and begin managing your samples, tapes, projects, and more.
+
+## Wiki:
+### [View the wiki here](https://github.com/romangarms/OP-1Z-Sample-Manager/wiki)
+
+## Development
 
 ### Run app using:
 1) Have Python 3.10 - 3.14 installed. (3.13/3.14 suggested)
 2) Install requirements in ```requirements.txt```.
 3) ```python main.py``` **or** build with ```python build.py```, and run the created executable under ```dist/```.
-
-### Using the App:
-- Connect your device in disk mode and begin managing your samples, tapes, projects, and more!
-
-## Wiki:
-View the wiki here: [https://github.com/romangarms/OP-1Z-Sample-Manager/wiki](https://github.com/romangarms/OP-1Z-Sample-Manager/wiki)
 
 ## Screenshots
 ### Home Page:
@@ -22,22 +25,7 @@ View the wiki here: [https://github.com/romangarms/OP-1Z-Sample-Manager/wiki](ht
 
 ### Sample Manager:
 ![sample manager OP-Z](/screenshots/samplemanageropz.png)
-![sample manager OP-Z](/screenshots/samplemanagerop1.png)
-
-### Sample Converter:
-![sample converter](/screenshots/sampleconverter.png)
-
-### Config File Editor:
-![config file editor](/screenshots/configeditoropz.png)
-
-### Tape Exporter:
-![tape exporter op1](/screenshots/tapeexport.png)
-
-### Backup and Restore:
-![Backup and Restore OP-1](/screenshots/backupandrestoreop1.png)
-
-### Utility Settings:
-![utility settings](/screenshots/utilitysettings.png)
+![sample manager OP-1](/screenshots/samplemanagerop1.png)
 
 ## Third-Party Licenses
 

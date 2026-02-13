@@ -46,6 +46,23 @@ function showConfirmModal(title, message, onConfirm, options = {}) {
         onConfirm();
     });
 
+    // Handle Enter/Space to confirm
+    const handleKeydown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            newBtn.click();
+        }
+    };
+
+    // Add keyboard listener when modal is shown, remove when hidden
+    modalEl.addEventListener('shown.bs.modal', () => {
+        document.addEventListener('keydown', handleKeydown);
+    }, { once: true });
+
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        document.removeEventListener('keydown', handleKeydown);
+    }, { once: true });
+
     // Show the modal
     new bootstrap.Modal(modalEl).show();
 }

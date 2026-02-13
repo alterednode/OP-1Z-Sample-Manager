@@ -1,11 +1,107 @@
+/* Action buttons */
+.more-actions-btn {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-left: 5px;
+    border-radius: 10px;
+    background-color: var(--offwhite);
+    color: var(--text-color);
+    border: 1px solid var(--background-color);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background-color 0.2s ease;
+}
+
+.more-actions-btn:hover {
+    background-color: #e8e8e8;
+}
+
 .delete-btn {
     display: inline-block;
+    padding: 4px 8px;
     margin-left: 5px;
     border-radius: 10px;
     background-color: var(--fourth-color);
     color: white;
     border: none;
     cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background-color 0.2s ease;
+}
+
+.delete-btn:hover {
+    background-color: #d32f2f;
+}
+
+/* Hide delete button on empty slots */
+.sampleslot.empty .delete-btn {
+    display: none;
+}
+
+/* Sample actions dropdown */
+.sample-actions-dropdown {
+    min-width: 120px;
+    z-index: 1050 !important;  /* Ensure dropdowns appear above all content */
+}
+
+.sample-actions-dropdown .dropdown-item {
+    cursor: pointer;
+    padding: 8px 16px;
+}
+
+.sample-actions-dropdown .dropdown-item:hover:not(.disabled) {
+    background-color: #f0f0f0;
+}
+
+.sample-actions-dropdown .dropdown-item.disabled {
+    color: #999;
+    cursor: not-allowed;
+}
+
+/* Inline rename input */
+.sample-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 2px 4px;
+    border: 2px solid var(--second-color);
+    border-radius: 3px;
+    background-color: white;
+    font: inherit;
+    outline: none;
+}
+
+.sample-name-input:focus {
+    border-color: var(--first-color);
+}
+
+/* Hide buttons during rename */
+.sampleslot.renaming .more-actions-btn,
+.sampleslot.renaming .delete-btn {
+    display: none;
+}
+
+/* Disable drag during rename */
+.sampleslot.renaming {
+    cursor: default;
+}
+
+/* Button container for proper layout */
+.sample-buttons {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+/* OP-1 sample actions */
+.op1-sample .more-actions-btn {
+    margin-left: auto;
+}
+
+.op1-sample.empty .delete-btn {
+    display: none;
 }
 
 .sampleslot {
@@ -19,9 +115,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
 }
 
-.sampleslot span {
+.sampleslot .sample-name {
     flex: 1;
     min-width: 0;
     white-space: nowrap;
@@ -30,7 +127,11 @@
 }
 
 .sampleslot.filled {
-    background-color: #63cc73;
+    border-left: 5px solid var(--first-color);  /* OP-Z green indicator */
+}
+
+.sampleslot.tilde {
+    border-left: 5px solid var(--third-color);  /* OP-Z yellow indicator for tilde (symbolic link) samples */
 }
 
 .sampleslot.drag-hover {
@@ -233,8 +334,17 @@
 .op1-subdirectory {
     margin-bottom: 10px;
     border-radius: 8px;
-    overflow: hidden;
+    overflow: visible;  /* Allow dropdowns to escape */
     background-color: var(--offwhite);
+}
+
+/* Color coding for folders */
+.op1-subdirectory.custom-folder {
+    border-left: 5px solid var(--first-color);  /* Green for custom folders */
+}
+
+.op1-subdirectory.builtin-folder {
+    border-left: 5px solid var(--third-color);  /* Yellow for built-in "user" folder */
 }
 
 .subdirectory-header {
@@ -274,13 +384,29 @@
 
 .subdirectory-actions {
     display: flex;
-    gap: 5px;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
 }
 
-.subdirectory-actions button {
-    padding: 4px 10px;
-    font-size: 0.8rem;
-    border-radius: 4px;
+/* Folder actions dropdown */
+.folder-actions-dropdown {
+    min-width: 120px;
+    z-index: 1050 !important;
+}
+
+.folder-actions-dropdown .dropdown-item {
+    cursor: pointer;
+    padding: 8px 16px;
+}
+
+.folder-actions-dropdown .dropdown-item:hover:not(.disabled) {
+    background-color: #f0f0f0;
+}
+
+.folder-actions-dropdown .dropdown-item.disabled {
+    color: #999;
+    cursor: not-allowed;
 }
 
 /* Read-only styling for "user" directory */
@@ -304,6 +430,7 @@
     padding: 10px 15px 15px 15px;
     background-color: white;
     border-top: 1px solid #e0e0e0;
+    overflow: visible;  /* Allow dropdowns to escape */
 }
 
 .subdirectory-content.collapsed {
@@ -319,6 +446,7 @@
     border-radius: 5px;
     margin-bottom: 6px;
     gap: 10px;
+    position: relative;
 }
 
 .op1-sample:last-child {
@@ -358,6 +486,31 @@
     color: #e65100;
 }
 
+/* Empty slot styling for OP-1 folders */
+.op1-sample.empty {
+    border-left: 5px solid #ccc;  /* Gray indicator for empty slots */
+}
+
+.op1-sample.empty .sample-name {
+    color: #999;
+    font-style: italic;
+}
+
+/* Hide delete button on empty OP-1 slots */
+.op1-sample.empty .delete-btn {
+    display: none;
+}
+
+/* Empty slot text styling */
+.empty-slot-text {
+    user-select: none;
+}
+
+/* Optional: Different hover state for empty slots */
+.op1-sample.empty:hover {
+    background-color: #f5f5f5;
+}
+
 /* Empty subdirectory message */
 .empty-subdirectory {
     color: #888;
@@ -374,6 +527,37 @@
 
 .op1-section.drag-hover {
     border: 2px dashed #339af0;
+}
+
+/* Empty folder slot styling */
+.empty-folder-slot {
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background-color: var(--offwhite);
+    border: 2px dashed #ccc;
+    border-left: 5px solid #ccc;
+}
+
+.empty-folder-content {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+}
+
+.empty-folder-text {
+    color: #999;
+    font-style: italic;
+    user-select: none;
+}
+
+.empty-folder-slot:hover {
+    background-color: #f5f5f5;
+    border-color: #aaa;
+}
+
+.empty-folder-slot.drag-hover {
+    background-color: #d0ebff;
+    border-color: #339af0;
 }
 
 /* Small button variant */
