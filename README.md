@@ -1,13 +1,17 @@
 # OP-1Z Sample Manager
 
-**NEW: Version 2.x.x is out! New Features!** Sample manager supports OP-1, tape track exporter, backup/restore, auto device detection, and much more.
+This is a standalone app built to handle everything with samples on the OP-Z / OP-1. It handles automatically converting and placing samples correctly onto your Teenage Engineering device. 
 
-This is a Flask app built to handle everything with samples on the OP-Z / OP-1. As time goes on, I'm adding more features around project management, export, and other various utilities.
+No longer will you have to convert to Mono 16bit 44.1khz Aiff files under 6 seconds (or 12 for drum samples!), or deal with the OP-Z sample directory system!
+
+Now just drop one or more samples onto the Sample Manager, and the app will handle everything for you. The app also contains utilities for backing up/restoring your projects, previewing and exporting projects, editing OP-Z system settings, and more.
 
 ### [Download the app here](https://github.com/romangarms/OP-1Z-Sample-Manager/releases)
 
 ### Using the App:
-Connect your device in disk mode and begin managing your samples, tapes, projects, and more.
+Connect your Teenage Engineering device in disk mode and begin managing your samples, tapes, projects, and more.
+
+Supported devices are OP-Z and OP-1 (Non-Field)
 
 ## Wiki:
 ### [View the wiki here](https://github.com/romangarms/OP-1Z-Sample-Manager/wiki)
@@ -15,7 +19,7 @@ Connect your device in disk mode and begin managing your samples, tapes, project
 ## Development
 
 ### Run app using:
-1) Have Python 3.10 - 3.14 installed. (3.13/3.14 suggested)
+1) Have Python 3.10 - 3.14 installed. (3.14 recommended)
 2) Install requirements in ```requirements.txt```.
 3) ```python main.py``` **or** build with ```python build.py```, and run the created executable under ```dist/```.
 
