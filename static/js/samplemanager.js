@@ -314,6 +314,13 @@ function createSampleButtonContainer(element, deviceType, options = {}) {
     buttonContainer.appendChild(moreBtn);
     buttonContainer.appendChild(dropdown);
 
+    // Check clipboard state when dropdown opens (to update paste button)
+    if (showPaste) {
+        moreBtn.addEventListener('show.bs.dropdown', () => {
+            updatePasteButtonStates();
+        });
+    }
+
     // Delete button
     if (showDelete) {
         const deleteBtn = createDeleteButton(() => {
@@ -1412,7 +1419,6 @@ function deleteOp1Subdirectory(path) {
 // State management
 let clipboardData = null;
 let currentRenameElement = null;
-let clipboardCheckInterval = null;
 
 /**
  * Start inline rename of a sample
@@ -1607,71 +1613,70 @@ async function copySample(path) {
  * Paste sample from clipboard (supports both system and internal clipboard)
  */
 async function pasteSample(device, targetPathOrCategory, slot) {
-    // Check if we should try system clipboard
-    const hasSystemClipboard = clipboardData && clipboardData.isSystemClipboard;
-
-    // Try system clipboard first if available
-    if (hasSystemClipboard) {
+    // If we have internal clipboard data with a path, use that
+    if (clipboardData && clipboardData.path) {
         try {
-            const response = await fetch('/paste-from-system-clipboard', {
+            const response = await fetch('/paste-sample', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     device: device,
+                    source_path: clipboardData.path,
                     target_path: targetPathOrCategory,
                     slot: slot
                 })
             });
 
-            if (response.ok) {
-                // Success - refresh the view
-                if (device === 'opz') {
-                    await fetchOpzSamples();
-                } else {
-                    await fetchOp1Samples();
-                }
-                toast.success('Sample pasted from system clipboard');
-                return;
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to paste');
             }
+
+            // Success - refresh the view
+            if (device === 'opz') {
+                await fetchOpzSamples();
+            } else {
+                await fetchOp1Samples();
+            }
+
+            toast.success('Sample pasted successfully');
+            return;
         } catch (err) {
-            console.warn('System clipboard paste failed, trying internal:', err);
+            console.error('Paste failed:', err);
+            toast.error(err.message);
+            return;
         }
     }
 
-    // Fall back to internal clipboard paste
-    if (!clipboardData || !clipboardData.path) {
-        toast.error('No sample in clipboard');
-        return;
-    }
-
+    // No internal clipboard - try system clipboard
     try {
-        const response = await fetch('/paste-sample', {
+        const response = await fetch('/paste-from-system-clipboard', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 device: device,
-                source_path: clipboardData.path,
                 target_path: targetPathOrCategory,
                 slot: slot
             })
         });
 
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || 'Failed to paste');
+        if (response.ok) {
+            // Success - refresh the view
+            if (device === 'opz') {
+                await fetchOpzSamples();
+            } else {
+                await fetchOp1Samples();
+            }
+            toast.success('Sample pasted from system clipboard');
+            return;
         }
 
-        // Success - refresh the view
-        if (device === 'opz') {
-            await fetchOpzSamples();
-        } else {
-            await fetchOp1Samples();
-        }
-
-        toast.success('Sample pasted successfully');
+        // System clipboard paste failed - show appropriate error
+        const data = await response.json();
+        toast.error(data.error || 'No sample in clipboard');
     } catch (err) {
-        console.error('Paste failed:', err);
-        toast.error(err.message);
+        console.error('System clipboard paste failed:', err);
+        toast.error('No sample in clipboard');
     }
 }
 
@@ -1711,33 +1716,6 @@ async function updatePasteButtonStates() {
             item.classList.add('disabled');
         }
     });
-}
-
-/**
- * Start periodic system clipboard monitoring
- */
-function startClipboardMonitoring() {
-    // Check clipboard every 2 seconds
-    if (clipboardCheckInterval) {
-        clearInterval(clipboardCheckInterval);
-    }
-
-    clipboardCheckInterval = setInterval(async () => {
-        // Only check if no internal clipboard is set
-        if (!clipboardData || !clipboardData.path) {
-            await updatePasteButtonStates();
-        }
-    }, 2000);
-}
-
-/**
- * Stop clipboard monitoring
- */
-function stopClipboardMonitoring() {
-    if (clipboardCheckInterval) {
-        clearInterval(clipboardCheckInterval);
-        clipboardCheckInterval = null;
-    }
 }
 
 // ============================================
@@ -1879,9 +1857,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await saveSettings(settings);
         });
     }
-
-    // Start system clipboard monitoring
-    startClipboardMonitoring();
 
     document.querySelectorAll(".samplepackbox").forEach(box => {
         box.addEventListener("dragover", (e) => {
