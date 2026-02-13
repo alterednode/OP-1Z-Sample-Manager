@@ -141,7 +141,15 @@
 </div>
 
 {% call settings_modal() %}
-{# Add page-specific settings here if needed #}
+<div class="mb-3">
+    <h6>Delete Confirmation</h6>
+    <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="setting-confirm-delete" checked>
+        <label class="form-check-label" for="setting-confirm-delete">
+            Show confirmation dialog before deleting samples
+        </label>
+    </div>
+</div>
 {% endcall %}
 
 <script src="/static/js/samplemanager.js"></script>

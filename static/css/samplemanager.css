@@ -529,6 +529,37 @@
     border: 2px dashed #339af0;
 }
 
+/* Empty folder slot styling */
+.empty-folder-slot {
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background-color: var(--offwhite);
+    border: 2px dashed #ccc;
+    border-left: 5px solid #ccc;
+}
+
+.empty-folder-content {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+}
+
+.empty-folder-text {
+    color: #999;
+    font-style: italic;
+    user-select: none;
+}
+
+.empty-folder-slot:hover {
+    background-color: #f5f5f5;
+    border-color: #aaa;
+}
+
+.empty-folder-slot.drag-hover {
+    background-color: #d0ebff;
+    border-color: #339af0;
+}
+
 /* Small button variant */
 .btn-small {
     padding: 6px 12px !important;

@@ -1120,6 +1120,9 @@ def paste_sample():
         else:
             # Source and target are the same - just return success
             return {"status": "pasted", "path": html.escape(safe_source_path), "message": "Sample already in this slot"}, 200
+    else:
+        # For OP-1, use unique filepath to handle pasting to same folder
+        dest_path = get_unique_filepath(dest_path)
 
     try:
         # Copy the file (don't move, so clipboard remains valid)

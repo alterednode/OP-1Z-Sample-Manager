@@ -1,41 +1,55 @@
 // Settings management
 async function loadSettings() {
     const settings = {
-        autoPitch: true // default
+        autoPitch: true,
+        confirmDelete: true
     };
 
     try {
-        const res = await fetch('/get-config-setting?config_option=AUTO_PITCH_SYNTH_SAMPLES');
-        const data = await res.json();
-        if (data.config_value !== undefined && data.config_value !== null && data.config_value !== '') {
-            settings.autoPitch = data.config_value;
+        const [autoPitchRes, confirmDeleteRes] = await Promise.all([
+            fetch('/get-config-setting?config_option=AUTO_PITCH_SYNTH_SAMPLES'),
+            fetch('/get-config-setting?config_option=CONFIRM_DELETE')
+        ]);
+
+        const autoPitchData = await autoPitchRes.json();
+        if (autoPitchData.config_value !== undefined && autoPitchData.config_value !== null && autoPitchData.config_value !== '') {
+            settings.autoPitch = autoPitchData.config_value;
+        }
+
+        const confirmDeleteData = await confirmDeleteRes.json();
+        if (confirmDeleteData.config_value !== undefined && confirmDeleteData.config_value !== null && confirmDeleteData.config_value !== '') {
+            settings.confirmDelete = confirmDeleteData.config_value;
         }
     } catch (e) {
         console.warn('Failed to load settings:', e);
     }
 
+    // Update checkboxes to reflect loaded settings
+    const autoPitchCheckbox = document.getElementById('setting-auto-pitch');
+    if (autoPitchCheckbox) autoPitchCheckbox.checked = settings.autoPitch;
+    const confirmDeleteCheckbox = document.getElementById('setting-confirm-delete');
+    if (confirmDeleteCheckbox) confirmDeleteCheckbox.checked = settings.confirmDelete;
+
     return settings;
 }
 
-async function saveSettings(settings) {
+async function saveSetting(configOption, value) {
     try {
         await fetch('/set-config-setting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                config_option: 'AUTO_PITCH_SYNTH_SAMPLES',
-                config_value: settings.autoPitch
+                config_option: configOption,
+                config_value: value
             })
         });
     } catch (e) {
-        console.warn('Failed to save settings:', e);
+        console.warn('Failed to save setting:', e);
     }
 }
 
 async function openSettingsModal() {
-    const settings = await loadSettings();
-    document.getElementById('setting-auto-pitch').checked = settings.autoPitch;
-
+    await loadSettings();
     const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
     modal.show();
 }
@@ -514,33 +528,42 @@ function updateStorageDisplay(device, storage, extraData = {}) {
  * @param {string} path - Full path to the sample
  * @param {function} refreshCallback - Function to call after successful deletion
  */
-function deleteSample(device, path, refreshCallback) {
+async function deleteSample(device, path, refreshCallback) {
     const filename = path.split('/').pop();
+
+    const performDelete = async () => {
+        try {
+            const response = await fetch('/delete-sample', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path, device: device })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to delete file');
+            }
+
+            if (refreshCallback) {
+                await refreshCallback();
+            }
+        } catch (err) {
+            console.error('Failed to delete sample:', err);
+            toast.error(err.message, 'Delete Failed');
+        }
+    };
+
+    // Skip confirmation if setting is disabled
+    const confirmDeleteCheckbox = document.getElementById('setting-confirm-delete');
+    if (confirmDeleteCheckbox && !confirmDeleteCheckbox.checked) {
+        await performDelete();
+        return;
+    }
 
     showConfirmModal(
         'Delete Sample',
         `Delete "<strong>${escapeHtml(filename)}</strong>"?`,
-        async () => {
-            try {
-                const response = await fetch('/delete-sample', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: path, device: device })
-                });
-
-                if (!response.ok) {
-                    const data = await response.json();
-                    throw new Error(data.error || 'Failed to delete file');
-                }
-
-                if (refreshCallback) {
-                    await refreshCallback();
-                }
-            } catch (err) {
-                console.error('Failed to delete sample:', err);
-                toast.error(err.message, 'Delete Failed');
-            }
-        }
+        performDelete
     );
 }
 
@@ -1110,9 +1133,9 @@ function renderOp1Section(parentFolder, subdirectories) {
         noFoldersMsg.remove();
     }
 
-    // Build map of existing folder elements
+    // Build map of existing folder elements (exclude empty folder slot)
     const existingFolders = new Map();
-    container.querySelectorAll('.op1-subdirectory').forEach(el => {
+    container.querySelectorAll('.op1-subdirectory:not(.empty-folder-slot)').forEach(el => {
         if (el.dataset.path) {
             existingFolders.set(el.dataset.path, el);
         }
@@ -1154,6 +1177,13 @@ function renderOp1Section(parentFolder, subdirectories) {
 
         previousElement = subdirDiv;
     });
+
+    // Manage empty folder slot at the bottom
+    let emptyFolderSlot = container.querySelector('.empty-folder-slot');
+    if (!emptyFolderSlot) {
+        emptyFolderSlot = createEmptyFolderSlot(parentFolder);
+    }
+    container.appendChild(emptyFolderSlot);  // Always move to end
 
     // Set up drop zone for the whole section (only once on first render)
     // Check if already set up by looking for a data attribute
@@ -1297,6 +1327,87 @@ async function getFilesFromDirectory(directoryEntry) {
             resolve(files);
         });
     });
+}
+
+/**
+ * Creates an empty folder slot placeholder for OP-1 drum/synth sections
+ * This provides a visual drop target for adding new folders
+ * @param {string} parentFolder - "drum" or "synth"
+ * @returns {HTMLElement} Empty folder slot DOM element
+ */
+function createEmptyFolderSlot(parentFolder) {
+    const emptySlot = document.createElement('div');
+    emptySlot.classList.add('op1-subdirectory', 'empty-folder-slot');
+
+    const content = document.createElement('div');
+    content.classList.add('empty-folder-content');
+    content.innerHTML = `
+        <span class="empty-folder-text">Drop folder here</span>
+    `;
+    emptySlot.appendChild(content);
+
+    // Set up drop zone handling
+    emptySlot.addEventListener('dragover', (e) => {
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            emptySlot.classList.add('drag-hover');
+        }
+    });
+
+    emptySlot.addEventListener('dragleave', (e) => {
+        if (!emptySlot.contains(e.relatedTarget)) {
+            emptySlot.classList.remove('drag-hover');
+        }
+    });
+
+    emptySlot.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        emptySlot.classList.remove('drag-hover');
+
+        const items = e.dataTransfer.items;
+        if (!items || items.length === 0) return;
+
+        const entry = items[0].webkitGetAsEntry ? items[0].webkitGetAsEntry() : null;
+        if (entry && entry.isDirectory) {
+            const folderName = entry.name;
+            const files = await getFilesFromDirectory(entry);
+
+            if (files.length === 0) {
+                toast.warning('The folder is empty');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('parent', parentFolder);
+            formData.append('folder_name', folderName);
+            files.forEach(file => formData.append('files', file));
+
+            try {
+                const response = await fetch('/upload-op1-folder', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Upload failed');
+                }
+                const result = await response.json();
+                if (result.errors && result.errors.length > 0) {
+                    toast.warning(`Some files failed: ${result.errors.join(', ')}`, 'Partial Upload');
+                } else {
+                    toast.success('Folder uploaded', 'Upload Complete');
+                }
+            } catch (err) {
+                console.error('Failed to upload folder:', err);
+                toast.error(err.message, 'Upload Failed');
+            }
+            await fetchOp1Samples();
+        }
+    });
+
+    return emptySlot;
 }
 
 /**
@@ -1848,13 +1959,21 @@ document.addEventListener('click', (e) => {
 
 // Set up OP-Z sample box drag-and-drop after DOM loads
 document.addEventListener('DOMContentLoaded', () => {
-    // Setup settings event listener
-    const settingsCheckbox = document.getElementById('setting-auto-pitch');
-    if (settingsCheckbox) {
-        settingsCheckbox.addEventListener('change', async (e) => {
-            const settings = await loadSettings();
-            settings.autoPitch = e.target.checked;
-            await saveSettings(settings);
+    // Load settings on page load
+    loadSettings();
+
+    // Setup settings event listeners
+    const autoPitchCheckbox = document.getElementById('setting-auto-pitch');
+    if (autoPitchCheckbox) {
+        autoPitchCheckbox.addEventListener('change', async (e) => {
+            await saveSetting('AUTO_PITCH_SYNTH_SAMPLES', e.target.checked);
+        });
+    }
+
+    const confirmDeleteCheckbox = document.getElementById('setting-confirm-delete');
+    if (confirmDeleteCheckbox) {
+        confirmDeleteCheckbox.addEventListener('change', async (e) => {
+            await saveSetting('CONFIRM_DELETE', e.target.checked);
         });
     }
 
