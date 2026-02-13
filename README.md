@@ -16,13 +16,6 @@ Supported devices are OP-Z and OP-1 (Non-Field)
 ## Wiki:
 ### [View the wiki here](https://github.com/romangarms/OP-1Z-Sample-Manager/wiki)
 
-## Development
-
-### Run app using:
-1) Have Python 3.10 - 3.14 installed. (3.14 recommended)
-2) Install requirements in ```requirements.txt```.
-3) ```python main.py``` **or** build with ```python build.py```, and run the created executable under ```dist/```.
-
 ## Screenshots
 ### Home Page:
 ![home page](/screenshots/homepage.png)
@@ -30,6 +23,15 @@ Supported devices are OP-Z and OP-1 (Non-Field)
 ### Sample Manager:
 ![sample manager OP-Z](/screenshots/samplemanageropz.png)
 ![sample manager OP-1](/screenshots/samplemanagerop1.png)
+
+### [View more screenhots of the app on the Wiki](https://github.com/romangarms/OP-1Z-Sample-Manager/wiki)
+
+## Development
+
+### Run app using:
+1) Have Python 3.10 - 3.14 installed. (3.14 recommended)
+2) Install requirements in ```requirements.txt```.
+3) ```python main.py``` **or** build with ```python build.py```, and run the created executable under ```dist/```.
 
 ## Third-Party Licenses
 
