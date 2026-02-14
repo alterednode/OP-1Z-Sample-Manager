@@ -52,43 +52,72 @@
 
     <!-- Main Content -->
     <main class="home-main">
-        <div class="tile-grid">
-    <!-- Row 1: Universal tools -->
-    <a href="/sampleconverter" class="nav-tile tile-primary">
-        <i data-lucide="audio-waveform"></i>
-        <h3>Sample Converter</h3>
-        <p>Convert audio files for OP-Z/OP-1</p>
-    </a>
+        <!-- Page 1: Main tools -->
+        <div class="tile-page active" data-page="0">
+            <div class="tile-grid">
+                <!-- Row 1: Universal tools -->
+                <a href="/sampleconverter" class="nav-tile tile-primary">
+                    <i data-lucide="audio-waveform"></i>
+                    <h3>Sample Converter</h3>
+                    <p>Convert audio files for OP-Z/OP-1</p>
+                </a>
 
-    <a href="/samplemanager" class="nav-tile tile-secondary">
-        <i data-lucide="folder-open"></i>
-        <h3>Sample Manager</h3>
-        <p>Manage samples on your device</p>
-        <span class="device-badge">OP-1 & OP-Z</span>
-    </a>
+                <a href="/samplemanager" class="nav-tile tile-secondary">
+                    <i data-lucide="folder-open"></i>
+                    <h3>Sample Manager</h3>
+                    <p>Manage samples on your device</p>
+                    <span class="device-badge">OP-1 & OP-Z</span>
+                </a>
 
-    <!-- Row 2: Device-specific + Backup -->
-    <div class="tile-split">
-        <a href="/configeditor" class="nav-tile tile-warning tile-half">
-            <i data-lucide="file-edit"></i>
-            <h3>Config Editor</h3>
-            <p>Edit OP-Z configs</p>
-            <span class="device-badge">OP-Z</span>
-        </a>
-        <a href="/tapeexport" class="nav-tile tile-white tile-half">
-            <i data-lucide="download"></i>
-            <h3>Tape Export</h3>
-            <p>Export OP-1 tapes to Downloads</p>
-            <span class="device-badge">OP-1</span>
-        </a>
-    </div>
+                <!-- Row 2: Device-specific + Backup -->
+                <div class="tile-split">
+                    <a href="/configeditor" class="nav-tile tile-warning tile-half">
+                        <i data-lucide="file-edit"></i>
+                        <h3>Config Editor</h3>
+                        <p>Edit OP-Z configs</p>
+                        <span class="device-badge">OP-Z</span>
+                    </a>
+                    <a href="/tapeexport" class="nav-tile tile-white tile-half">
+                        <i data-lucide="download"></i>
+                        <h3>Tape Export</h3>
+                        <p>Export OP-1 tapes to Downloads</p>
+                        <span class="device-badge">OP-1</span>
+                    </a>
+                </div>
 
-    <a href="/backup" class="nav-tile tile-danger">
-        <i data-lucide="hard-drive-download"></i>
-        <h3>Backup & Restore</h3>
-        <p>Backup samples and projects</p>
-        <span class="device-badge">OP-1 & OP-Z</span>
-    </a>
+                <a href="/backup" class="nav-tile tile-danger">
+                    <i data-lucide="hard-drive-download"></i>
+                    <h3>Backup & Restore</h3>
+                    <p>Backup samples and projects</p>
+                    <span class="device-badge">OP-1 & OP-Z</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Page 2: Additional tools -->
+        <div class="tile-page" data-page="1">
+            <div class="tile-grid tile-grid-single">
+                <a href="/sampleconfigurator" class="nav-tile tile-secondary">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <h3>Sample Configurator</h3>
+                    <p>Edit synth parameters in AIFF files</p>
+                    <span class="device-badge">OP-Z & OP-1</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Pagination Nav -->
+        <div class="page-nav">
+            <button class="page-arrow" id="page-arrow-left" onclick="navigatePage(-1)" disabled>
+                <i data-lucide="chevron-left"></i>
+            </button>
+            <div class="page-dots">
+                <button class="page-dot active" data-page="0" onclick="goToPage(0)"></button>
+                <button class="page-dot" data-page="1" onclick="goToPage(1)"></button>
+            </div>
+            <button class="page-arrow" id="page-arrow-right" onclick="navigatePage(1)">
+                <i data-lucide="chevron-right"></i>
+            </button>
         </div>
     </main>
 </div>

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% from 'macros.html' import nav_button %}
+
+{%block stylesheets %}
+<link rel="stylesheet" href="/static/css/sampleconfigurator.css">
+{%endblock%}
+
+{%block title %}
+<title>Sample Configurator</title>
+{%endblock%}
+
+{% block main %}
+<h1>Sample Configurator</h1>
+<p class="page-description">Edit synth engine parameters embedded in OP-1/OP-Z AIFF sample files.</p>
+
+<div class="header-row">
+    {{ nav_button('/', 'Home', icon='home') }}
+    <button id="save-btn" class="nav-btn nav-btn-secondary" onclick="saveMetadata()">
+        <i data-lucide="save"></i>
+        Save
+    </button>
+    <button id="undo-btn" class="nav-btn nav-btn-warning" onclick="undoSave()" disabled>
+        <i data-lucide="undo-2"></i>
+        Undo
+    </button>
+</div>
+
+<!-- Drop Zone (visible initially) -->
+<div id="drop-zone-container" class="configurator-drop-zone-container">
+    <div class="configurator-drop-zone" id="configurator-drop-zone">
+        <i data-lucide="upload" class="drop-icon"></i>
+        <p class="drop-text">Drag & drop an AIFF file here</p>
+        <p class="drop-hint">or click to browse</p>
+    </div>
+</div>
+
+<!-- Editor Container (hidden initially) -->
+<div id="editor-container" class="editor-container" hidden>
+    <div class="editor-grid">
+        <!-- File Header (spans both columns) -->
+        <div class="file-header-bar">
+            <div class="file-header-info">
+                <i data-lucide="file-audio"></i>
+                <span id="loaded-filename" class="loaded-filename"></span>
+            </div>
+            <button id="load-different-btn" class="nav-btn nav-btn-secondary" onclick="loadDifferentFile()">
+                <i data-lucide="folder-open"></i>
+                Load Different File
+            </button>
+        </div>
+
+        <!-- Left Column: ADSR Envelope, Play Mode, Portamento -->
+        <div class="editor-column editor-column-left">
+            <div class="editor-section">
+                <h3>ADSR Envelope</h3>
+                <div class="adsr-canvas-container">
+                    <canvas id="adsr-canvas"></canvas>
+                </div>
+                <div class="adsr-values">
+                    <div class="adsr-value-item">
+                        <span class="adsr-label">Attack</span>
+                        <span class="adsr-value" id="adsr-attack-value">0</span>
+                    </div>
+                    <div class="adsr-value-item">
+                        <span class="adsr-label">Decay</span>
+                        <span class="adsr-value" id="adsr-decay-value">0</span>
+                    </div>
+                    <div class="adsr-value-item">
+                        <span class="adsr-label">Sustain</span>
+                        <span class="adsr-value" id="adsr-sustain-value">0</span>
+                    </div>
+                    <div class="adsr-value-item">
+                        <span class="adsr-label">Release</span>
+                        <span class="adsr-value" id="adsr-release-value">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Play Mode -->
+            <div class="editor-section">
+                <h3>Play Mode</h3>
+                <div class="control-row">
+                    <div class="segmented-buttons" id="playmode-buttons">
+                        <button class="seg-btn" data-value="2048">Poly</button>
+                        <button class="seg-btn" data-value="5120">Mono</button>
+                        <button class="seg-btn" data-value="11264">Legato</button>
+                        <button class="seg-btn" data-value="14336">Unison</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portamento -->
+            <div class="editor-section">
+                <h3>Portamento</h3>
+                <div class="control-row slider-row">
+                    <input type="range" id="portamento-slider" min="0" max="32767" step="256" value="0">
+                    <span class="slider-value" id="portamento-value">Off</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Controls -->
+        <div class="editor-column editor-column-right">
+            <!-- Base Frequency -->
+            <div class="editor-section">
+                <h3>Base Frequency</h3>
+                <div class="control-row freq-row">
+                    <div class="freq-control">
+                        <label for="note-picker">Note</label>
+                        <select id="note-picker" class="freq-select"></select>
+                    </div>
+                    <div class="freq-control">
+                        <label for="freq-input">Hz</label>
+                        <input type="number" id="freq-input" class="freq-input" min="20" max="20000" step="0.01">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Octave -->
+            <div class="editor-section">
+                <h3>Octave</h3>
+                <div class="control-row">
+                    <div class="segmented-buttons" id="octave-buttons">
+                        <button class="seg-btn" data-value="-2">-2</button>
+                        <button class="seg-btn" data-value="-1">-1</button>
+                        <button class="seg-btn" data-value="0">0</button>
+                        <button class="seg-btn" data-value="1">+1</button>
+                        <button class="seg-btn" data-value="2">+2</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FX (read-only) -->
+            <div class="editor-section read-only-section">
+                <div class="section-header-row">
+                    <h3>FX</h3>
+                    <span class="readonly-badge">Read-only</span>
+                </div>
+                <div class="control-row readonly-row">
+                    <div class="readonly-field">
+                        <span class="readonly-label">Type</span>
+                        <span class="readonly-value" id="fx-type">--</span>
+                    </div>
+                    <div class="readonly-field">
+                        <span class="readonly-label">Active</span>
+                        <span class="readonly-value" id="fx-active">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LFO (read-only) -->
+            <div class="editor-section read-only-section">
+                <div class="section-header-row">
+                    <h3>LFO</h3>
+                    <span class="readonly-badge">Read-only</span>
+                </div>
+                <div class="control-row readonly-row">
+                    <div class="readonly-field">
+                        <span class="readonly-label">Type</span>
+                        <span class="readonly-value" id="lfo-type">--</span>
+                    </div>
+                    <div class="readonly-field">
+                        <span class="readonly-label">Active</span>
+                        <span class="readonly-value" id="lfo-active">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/sampleconfigurator.js"></script>
+{% endblock %}
