@@ -104,7 +104,7 @@ function drawADSRCanvas(adsr) {
     const xAttack = x0 + attackMaxW * a;
     const yAttack = yTop;
 
-    const xDecay = attackZoneEnd + decayMaxW * d;
+    const xDecay = xAttack + decayMaxW * d;
     const yDecay = yTop + drawH * (1 - s);
 
     const xSustainEnd = sustainZoneEnd;
@@ -144,7 +144,7 @@ function drawADSRCanvas(adsr) {
         { x: xAttack, y: yAttack, param: 'attack', axis: 'x',
           xMin: x0, xMax: attackZoneEnd },
         { x: xDecay, y: yDecay, param: 'decay', axis: 'x',
-          xMin: attackZoneEnd, xMax: decayZoneEnd },
+          xMin: xAttack, xMax: xAttack + decayMaxW },
         { x: xSustainEnd, y: ySustainEnd, param: 'sustain', axis: 'y',
           yMin: yTop, yMax: y0 },
         { x: xRelease, y: yRelease, param: 'release', axis: 'x',
