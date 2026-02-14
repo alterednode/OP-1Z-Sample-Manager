@@ -30,6 +30,10 @@ const PLAY_MODES = [
     { name: 'Unison', value: 14336 },
 ];
 
+// FX and LFO types — fetched from backend (devices.py)
+let FX_TYPES = [];
+let LFO_TYPES = [];
+
 // Generate note frequency table (C0-B8)
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const NOTE_FREQS = [];
@@ -328,6 +332,80 @@ function setupPortamentoSlider() {
     });
 }
 
+function populateDropdown(selectId, types) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = '';
+    types.forEach(t => {
+        const option = document.createElement('option');
+        option.value = t.value;
+        option.textContent = t.name;
+        select.appendChild(option);
+    });
+}
+
+async function fetchTypes() {
+    try {
+        const response = await fetch('/sampleconfigurator/types');
+        const data = await response.json();
+        // Use OP-1 types (OP-Z ignores FX/LFO metadata)
+        FX_TYPES = data.op1.fx_types;
+        LFO_TYPES = data.op1.lfo_types;
+        populateDropdown('fx-type-select', FX_TYPES);
+        populateDropdown('lfo-type-select', LFO_TYPES);
+    } catch (err) {
+        console.error('Error fetching types:', err);
+    }
+}
+
+function setupFxControls() {
+    const select = document.getElementById('fx-type-select');
+    if (select) {
+        select.addEventListener('change', () => {
+            if (currentMetadata) {
+                currentMetadata.fx_type = select.value;
+            }
+        });
+    }
+
+    const container = document.getElementById('fx-active-buttons');
+    if (container) {
+        container.querySelectorAll('.seg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                if (currentMetadata) {
+                    currentMetadata.fx_active = btn.dataset.value === 'true';
+                }
+            });
+        });
+    }
+}
+
+function setupLfoControls() {
+    const select = document.getElementById('lfo-type-select');
+    if (select) {
+        select.addEventListener('change', () => {
+            if (currentMetadata) {
+                currentMetadata.lfo_type = select.value;
+            }
+        });
+    }
+
+    const container = document.getElementById('lfo-active-buttons');
+    if (container) {
+        container.querySelectorAll('.seg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                container.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                if (currentMetadata) {
+                    currentMetadata.lfo_active = btn.dataset.value === 'true';
+                }
+            });
+        });
+    }
+}
+
 function setupFrequencyControls() {
     const notePicker = document.getElementById('note-picker');
     const freqInput = document.getElementById('freq-input');
@@ -376,11 +454,6 @@ function setupFrequencyControls() {
 // ============================================================
 // Populate Controls from Metadata
 // ============================================================
-
-function capitalizeFirst(str) {
-    if (!str) return '--';
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
 
 function populateControls(metadata) {
     if (!metadata) return;
@@ -445,25 +518,23 @@ function populateControls(metadata) {
         });
     }
 
-    // FX (read-only) — fx_type is a string like "delay"
-    const fxType = document.getElementById('fx-type');
-    const fxActive = document.getElementById('fx-active');
-    if (fxType) {
-        fxType.textContent = capitalizeFirst(metadata.fx_type);
+    // FX
+    const fxSelect = document.getElementById('fx-type-select');
+    if (fxSelect && metadata.fx_type !== undefined) {
+        fxSelect.value = metadata.fx_type;
     }
-    if (fxActive) {
-        fxActive.textContent = metadata.fx_active ? 'On' : 'Off';
-    }
+    document.querySelectorAll('#fx-active-buttons .seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === String(metadata.fx_active));
+    });
 
-    // LFO (read-only) — lfo_type is a string like "random"
-    const lfoType = document.getElementById('lfo-type');
-    const lfoActive = document.getElementById('lfo-active');
-    if (lfoType) {
-        lfoType.textContent = capitalizeFirst(metadata.lfo_type);
+    // LFO
+    const lfoSelect = document.getElementById('lfo-type-select');
+    if (lfoSelect && metadata.lfo_type !== undefined) {
+        lfoSelect.value = metadata.lfo_type;
     }
-    if (lfoActive) {
-        lfoActive.textContent = metadata.lfo_active ? 'On' : 'Off';
-    }
+    document.querySelectorAll('#lfo-active-buttons .seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === String(metadata.lfo_active));
+    });
 }
 
 // ============================================================
@@ -727,6 +798,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupOctaveButtons();
     setupPortamentoSlider();
     setupFrequencyControls();
+    setupFxControls();
+    setupLfoControls();
+    fetchTypes();
     preventWindowDrag();
     lucide.createIcons();
 });

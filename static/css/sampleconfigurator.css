@@ -296,58 +296,6 @@
 }
 
 /* ===========================================
-   Read-Only Sections (FX, LFO)
-   =========================================== */
-
-.read-only-section {
-    opacity: 0.6;
-}
-
-.section-header-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.section-header-row h3 {
-    margin: 0;
-}
-
-.readonly-badge {
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background-color: var(--neutral-gray);
-    color: white;
-}
-
-.readonly-row {
-    gap: 20px;
-}
-
-.readonly-field {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.readonly-label {
-    font-weight: 500;
-    font-size: 0.85rem;
-    color: var(--text-color);
-}
-
-.readonly-value {
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: var(--text-color);
-}
-
-/* ===========================================
    Disabled Nav Buttons
    =========================================== */
 

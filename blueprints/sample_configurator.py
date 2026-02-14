@@ -12,6 +12,7 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 
 from blueprints.aiff_utils import read_appl_metadata, write_appl_metadata, validate_aiff_file
+from blueprints.devices import OP_1, OP_Z
 
 sample_configurator_bp = Blueprint('sample_configurator', __name__)
 
@@ -24,6 +25,20 @@ BACKUP_DIR = os.path.join(tempfile.gettempdir(), "op1z_sm_configurator_backups")
 
 def _ensure_backup_dir():
     os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+@sample_configurator_bp.route('/sampleconfigurator/types')
+def get_types():
+    """Return FX and LFO type options for each device."""
+    def format_types(device):
+        return {
+            "fx_types": [{"name": n, "value": v} for n, v in device.fx_types],
+            "lfo_types": [{"name": n, "value": v} for n, v in device.lfo_types],
+        }
+    return jsonify({
+        "op1": format_types(OP_1),
+        "opz": format_types(OP_Z),
+    })
 
 
 @sample_configurator_bp.route('/sampleconfigurator/load', methods=['POST'])

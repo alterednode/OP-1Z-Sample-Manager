@@ -130,38 +130,38 @@
                 </div>
             </div>
 
-            <!-- FX (read-only) -->
-            <div class="editor-section read-only-section">
-                <div class="section-header-row">
-                    <h3>FX</h3>
-                    <span class="readonly-badge">Read-only</span>
-                </div>
-                <div class="control-row readonly-row">
-                    <div class="readonly-field">
-                        <span class="readonly-label">Type</span>
-                        <span class="readonly-value" id="fx-type">--</span>
+            <!-- FX -->
+            <div class="editor-section">
+                <h3>FX</h3>
+                <div class="control-row freq-row">
+                    <div class="freq-control">
+                        <label for="fx-type-select">Type</label>
+                        <select id="fx-type-select" class="freq-select"></select>
                     </div>
-                    <div class="readonly-field">
-                        <span class="readonly-label">Active</span>
-                        <span class="readonly-value" id="fx-active">--</span>
+                    <div class="freq-control">
+                        <label>Active</label>
+                        <div class="segmented-buttons" id="fx-active-buttons">
+                            <button class="seg-btn" data-value="true">On</button>
+                            <button class="seg-btn" data-value="false">Off</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- LFO (read-only) -->
-            <div class="editor-section read-only-section">
-                <div class="section-header-row">
-                    <h3>LFO</h3>
-                    <span class="readonly-badge">Read-only</span>
-                </div>
-                <div class="control-row readonly-row">
-                    <div class="readonly-field">
-                        <span class="readonly-label">Type</span>
-                        <span class="readonly-value" id="lfo-type">--</span>
+            <!-- LFO -->
+            <div class="editor-section">
+                <h3>LFO</h3>
+                <div class="control-row freq-row">
+                    <div class="freq-control">
+                        <label for="lfo-type-select">Type</label>
+                        <select id="lfo-type-select" class="freq-select"></select>
                     </div>
-                    <div class="readonly-field">
-                        <span class="readonly-label">Active</span>
-                        <span class="readonly-value" id="lfo-active">--</span>
+                    <div class="freq-control">
+                        <label>Active</label>
+                        <div class="segmented-buttons" id="lfo-active-buttons">
+                            <button class="seg-btn" data-value="true">On</button>
+                            <button class="seg-btn" data-value="false">Off</button>
+                        </div>
                     </div>
                 </div>
             </div>
