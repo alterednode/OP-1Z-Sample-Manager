@@ -78,14 +78,13 @@
 
 /* File Header Bar */
 .file-header-bar {
-    grid-column: 1 / -1;
     display: flex;
     justify-content: space-between;
     align-items: center;
     background-color: var(--background-color);
     padding: 12px 20px;
     border-radius: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     gap: 12px;
     flex-wrap: wrap;
@@ -112,6 +111,108 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Sample Type Badge */
+.sample-type-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.badge-synth {
+    background-color: var(--second-color);
+    color: white;
+}
+
+.badge-drum {
+    background-color: var(--fourth-color);
+    color: white;
+}
+
+/* ===========================================
+   Waveform
+   =========================================== */
+
+.waveform-section {
+    margin-bottom: 16px;
+}
+
+.waveform-canvas-container {
+    background-color: #1a1a2e;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+    aspect-ratio: 4 / 1;
+    position: relative;
+    overflow: hidden;
+}
+
+.waveform-canvas-container canvas {
+    display: block;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: calc(100% - 20px);
+    height: calc(100% - 20px);
+}
+
+.waveform-canvas-container .waveform-overlay {
+    z-index: 1;
+}
+
+/* Playback Controls */
+.playback-controls {
+    display: flex;
+    gap: 8px;
+}
+
+/* ===========================================
+   Drum Slice Strip
+   =========================================== */
+
+.slice-strip {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 8px;
+}
+
+.slice-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 0;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--offwhite);
+    color: var(--text-color);
+    font-weight: 600;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.slice-btn:hover {
+    background-color: #d0d0d0;
+}
+
+.slice-btn.selected {
+    background-color: var(--second-color);
+    color: white;
+    box-shadow: 0 2px 6px rgba(1, 134, 187, 0.4);
+}
+
+.slice-btn.inactive {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.slice-btn.inactive:hover {
+    background-color: var(--offwhite);
 }
 
 /* ===========================================
@@ -333,5 +434,9 @@
     .seg-btn {
         padding: 8px 10px;
         font-size: 0.8rem;
+    }
+
+    .waveform-canvas-container {
+        aspect-ratio: 3 / 1;
     }
 }

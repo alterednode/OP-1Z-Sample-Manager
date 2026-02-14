@@ -6,13 +6,15 @@ Provides routes to load, save, and undo edits to OP-1/OP-Z AIFF sample metadata.
 
 import os
 import shutil
+import subprocess
 import tempfile
 import uuid
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_file
 
 from blueprints.aiff_utils import read_appl_metadata, write_appl_metadata, validate_aiff_file
 from blueprints.devices import OP_1, OP_Z
+from blueprints.utils import run_ffmpeg
 
 sample_configurator_bp = Blueprint('sample_configurator', __name__)
 
@@ -192,3 +194,58 @@ def undo_save():
         "metadata": metadata,
         "can_undo": False
     })
+
+
+@sample_configurator_bp.route('/sampleconfigurator/audio/<file_id>')
+def get_audio(file_id):
+    """Serve the loaded AIFF file's audio as WAV for browser playback via FFmpeg."""
+    if file_id not in _loaded_files:
+        return jsonify({"error": "File not loaded"}), 404
+
+    filepath = _loaded_files[file_id]['path']
+
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            temp_path = tmp.name
+
+        result = run_ffmpeg([
+            "-y",
+            "-i", filepath,
+            "-acodec", "pcm_s16le",
+            "-ar", "44100",
+            temp_path
+        ], capture_output=True, timeout=10)
+
+        if result.returncode != 0:
+            current_app.logger.error(f"FFmpeg conversion failed: {result.stderr.decode()}")
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+            return jsonify({"error": "Audio conversion failed"}), 500
+
+        response = send_file(
+            temp_path,
+            mimetype="audio/wav",
+            as_attachment=False
+        )
+
+        @response.call_on_close
+        def cleanup():
+            try:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+        return response
+
+    except subprocess.TimeoutExpired:
+        current_app.logger.error("FFmpeg conversion timed out")
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({"error": "Audio conversion timed out"}), 500
+    except Exception as e:
+        current_app.logger.error(f"Error converting audio: {e}")
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({"error": "Failed to convert audio"}), 500
