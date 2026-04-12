@@ -29,7 +29,7 @@ Supported devices are OP-Z and OP-1 (Non-Field)
 ## Development
 
 ### Run app using:
-1) Have Python 3.10 - 3.14 installed. (3.14 recommended)
+1) Have Python 3.10 - 3.14 installed. (3.13 recommended)
 2) Install requirements in ```requirements.txt```.
 3) ```python main.py``` **or** build with ```python build.py```, and run the created executable under ```dist/```.
 
