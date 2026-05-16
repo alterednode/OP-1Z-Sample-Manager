@@ -40,6 +40,8 @@ class Device:
     sample_limits: dict[str, int]
     required_directories: tuple[str, ...]
     supported_features: dict[str, bool]
+    fx_types: tuple[tuple[str, str], ...]   # (display_name, value) pairs
+    lfo_types: tuple[tuple[str, str], ...]  # (display_name, value) pairs
 
 
 # OP-Z Device Configuration
@@ -57,7 +59,9 @@ OP_Z = Device(
         "has_tape_export": False,
         "has_samplepacks": True,
         "has_drum_synth_folders": False,
-    }
+    },
+    fx_types=(),   # OP-Z ignores FX metadata in AIFF files
+    lfo_types=(),  # OP-Z ignores LFO metadata in AIFF files
 )
 
 # OP-1 Device Configuration
@@ -79,7 +83,26 @@ OP_1 = Device(
         "has_tape_export": True,
         "has_samplepacks": False,
         "has_drum_synth_folders": True,
-    }
+    },
+    fx_types=(
+        ("CWO", "cwo"),
+        ("Delay", "delay"),
+        ("Grid", "grid"),
+        ("Nitro", "nitro"),
+        ("Phone", "phone"),
+        ("Punch", "punch"),
+        ("Spring", "spring"),
+        ("Filter :)", "filter"),
+    ),
+    lfo_types=(
+        ("Bend", "bend"),
+        ("Crank", "crank"),
+        ("Element", "element"),
+        ("MIDI", "midi"),
+        ("Random", "random"),
+        ("Tremolo", "tremolo"),
+        ("Value", "value"),
+    ),
 )
 
 

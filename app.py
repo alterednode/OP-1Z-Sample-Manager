@@ -12,6 +12,7 @@ from blueprints.dialogs import dialog_bp
 from blueprints.backup import backup_bp
 from blueprints.device_monitor import device_monitor_bp, initialize_device_monitor
 from blueprints.update_checker import update_checker_bp
+from blueprints.sample_configurator import sample_configurator_bp
 
 
 # Get base path for PyInstaller or normal execution
@@ -35,6 +36,7 @@ app.register_blueprint(dialog_bp)
 app.register_blueprint(backup_bp)
 app.register_blueprint(device_monitor_bp)
 app.register_blueprint(update_checker_bp)
+app.register_blueprint(sample_configurator_bp)
 
 # run before server startup at the end of this file
 def app_startup_tasks():
@@ -73,6 +75,10 @@ def sampleconverter():
 @app.route("/samplemanager")
 def samplemanager():
     return render_template("samplemanager.html")
+
+@app.route("/sampleconfigurator")
+def sampleconfigurator_page():
+    return render_template("sampleconfigurator.html")
 
 @app.route("/tapeexport")
 def tapeexport():

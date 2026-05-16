@@ -255,6 +255,7 @@ function createDeleteButton(onDelete) {
  * @param {boolean} options.showCopy - Show copy option (default: true)
  * @param {boolean} options.showPaste - Show paste option (default: true)
  * @param {boolean} options.showDelete - Show delete button (default: true)
+ * @param {boolean} options.showEdit - Show edit option (default: true)
  * @param {Function} options.refreshCallback - Callback after delete
  * @param {Function} options.getPasteTarget - Custom function to get paste target
  * @param {boolean} options.stopPropagation - Stop propagation on more button click
@@ -266,6 +267,7 @@ function createSampleButtonContainer(element, deviceType, options = {}) {
         showCopy = true,
         showPaste = true,
         showDelete = true,
+        showEdit = true,
         refreshCallback,
         getPasteTarget,
         stopPropagation = false
@@ -318,6 +320,19 @@ function createSampleButtonContainer(element, deviceType, options = {}) {
                     pasteSample(deviceType, target.path, target.slot);
                 } else {
                     pasteSample(deviceType, element.dataset.path);
+                }
+            }
+        });
+    }
+
+    if (showEdit) {
+        actions.push({
+            label: 'Edit',
+            className: 'edit-item',
+            handler: () => {
+                const path = element.dataset.path;
+                if (path) {
+                    window.location.href = `/sampleconfigurator?path=${encodeURIComponent(path)}`;
                 }
             }
         });
@@ -717,6 +732,16 @@ function updateOpzSlotElement(slotDiv, slot, slotIndex) {
             copyItem.classList.remove('disabled');
         } else {
             copyItem.classList.add('disabled');
+        }
+    }
+
+    // Update edit item disabled state
+    const editItem = slotDiv.querySelector('.edit-item');
+    if (editItem) {
+        if (isFilled || isTilde) {
+            editItem.classList.remove('disabled');
+        } else {
+            editItem.classList.add('disabled');
         }
     }
 
@@ -1427,12 +1452,13 @@ function createEmptySlot(parentFolder, subdirName) {
     nameSpan.textContent = '(empty)';
     emptySlot.appendChild(nameSpan);
 
-    // Button container - using shared factory (only paste, no rename/copy/delete)
+    // Button container - using shared factory (only paste, no rename/copy/delete/edit)
     const buttonContainer = createSampleButtonContainer(emptySlot, 'op1', {
         showRename: false,
         showCopy: false,
         showPaste: true,
         showDelete: false,
+        showEdit: false,
         stopPropagation: true
     });
     emptySlot.appendChild(buttonContainer);

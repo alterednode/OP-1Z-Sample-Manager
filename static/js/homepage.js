@@ -293,6 +293,45 @@ function openExternalLink(url) {
         .catch(err => console.error('Error opening link:', err));
 }
 
+// ============================================================
+// Homepage Pagination
+// ============================================================
+
+let currentPage = 0;
+const totalPages = 2;
+
+/**
+ * Navigate to a page by relative direction (-1 or +1)
+ */
+function navigatePage(direction) {
+    goToPage(currentPage + direction);
+}
+
+/**
+ * Navigate directly to a page index
+ */
+function goToPage(index) {
+    if (index < 0 || index >= totalPages || index === currentPage) return;
+
+    currentPage = index;
+
+    // Toggle active on tile pages
+    document.querySelectorAll('.tile-page').forEach(page => {
+        page.classList.toggle('active', parseInt(page.dataset.page) === currentPage);
+    });
+
+    // Toggle active on dots
+    document.querySelectorAll('.page-dot').forEach(dot => {
+        dot.classList.toggle('active', parseInt(dot.dataset.page) === currentPage);
+    });
+
+    // Enable/disable arrows
+    const leftArrow = document.getElementById('page-arrow-left');
+    const rightArrow = document.getElementById('page-arrow-right');
+    if (leftArrow) leftArrow.disabled = currentPage === 0;
+    if (rightArrow) rightArrow.disabled = currentPage === totalPages - 1;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize Lucide icons

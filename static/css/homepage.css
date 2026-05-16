@@ -357,6 +357,104 @@ body > .container {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
+/* ===========================================
+   Pagination
+   =========================================== */
+
+/* Tile pages: hidden by default, active is visible */
+.tile-page {
+    display: none;
+}
+
+.tile-page.active {
+    display: block;
+    animation: page-fade-in 0.3s ease-out;
+}
+
+@keyframes page-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Single-tile grid centering */
+.tile-grid-single {
+    display: flex;
+    justify-content: center;
+}
+
+.tile-grid-single .nav-tile {
+    width: clamp(200px, 30vw, 400px);
+}
+
+/* Pagination nav bar */
+.page-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+/* Arrow buttons */
+.page-arrow {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--neutral-gray);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    color: var(--text-color);
+}
+
+.page-arrow:hover:not(:disabled) {
+    background-color: var(--neutral-gray);
+    color: white;
+}
+
+.page-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.page-arrow i {
+    width: 18px;
+    height: 18px;
+}
+
+/* Dot indicators */
+.page-dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.page-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    background-color: var(--neutral-gray);
+    opacity: 0.4;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.page-dot.active {
+    background-color: var(--second-color);
+    opacity: 1;
+    transform: scale(1.2);
+}
+
+.page-dot:hover:not(.active) {
+    opacity: 0.7;
+}
+
 /* Footer links */
 .footer-links {
     display: flex;
