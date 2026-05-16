@@ -1546,4 +1546,19 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchTypes();
     preventWindowDrag();
     lucide.createIcons();
+
+    // Check for path parameter and auto-load
+    const urlParams = new URLSearchParams(window.location.search);
+    const pathParam = urlParams.get('path');
+    if (pathParam) {
+        loadFileFromPath(pathParam);
+
+        // Replace Home button with Back button
+        const homeBtn = document.querySelector('.header-row .nav-btn-primary');
+        if (homeBtn) {
+            homeBtn.innerHTML = '<i data-lucide="arrow-left"></i> Back';
+            homeBtn.onclick = () => window.location.href = '/samplemanager';
+            lucide.createIcons();
+        }
+    }
 });
