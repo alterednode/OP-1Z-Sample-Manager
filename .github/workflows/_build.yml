@@ -44,8 +44,10 @@ jobs:
 
       - name: Set version in version file
         shell: bash
+        env:
+          VERSION_LABEL: ${{ inputs.version_label }}
         run: |
-          echo "VERSION = \"${{ inputs.version_label }}\"" > blueprints/github_version_file.py
+          echo "VERSION = \"$VERSION_LABEL\"" > blueprints/github_version_file.py
 
       - name: Ensure changelog file exists
         if: ${{ !inputs.fetch_changelog }}
@@ -72,15 +74,18 @@ jobs:
       - name: Package artifact
         if: ${{ inputs.upload_artifact }}
         shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          VERSION_LABEL: ${{ inputs.version_label }}
         run: |
-          ARTIFACT="op-1z-sample-manager-${{ inputs.platform }}-${{ inputs.version_label }}"
+          ARTIFACT="op-1z-sample-manager-$PLATFORM-$VERSION_LABEL"
           mkdir -p artifacts
           if [ ! -d "dist" ]; then
             echo "dist/ not found; build likely failed."
             exit 1
           fi
           cd dist
-          if [ "${{ inputs.platform }}" = "macos" ]; then
+          if [ "$PLATFORM" = "macos" ]; then
             TARGET="OP-1Z Sample Manager.app"
           else
             TARGET="."
