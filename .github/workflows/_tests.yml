@@ -5,20 +5,27 @@ on:
 
 jobs:
   python_tests:
-    uses: ./.github/workflows/_python_tests.yml
-
-  tests_complete:
-    name: Tests Complete
-    if: always()
-    needs:
-      - python_tests
+    name: Python Tests
     runs-on: ubuntu-latest
 
     steps:
-      - name: Fail if any test suite failed
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
         shell: bash
         run: |
-          if [[ "${{ needs.python_tests.result }}" != "success" ]]; then
-            echo "One or more test suites failed."
-            exit 1
-          fi
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Python tests
+        shell: bash
+        run: |
+          python -m pytest -q
