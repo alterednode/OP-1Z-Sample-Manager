@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+      version_label:
+        required: true
+        type: string
+      upload_artifact:
+        required: false
+        type: boolean
+        default: false
+      fetch_changelog:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build (${{ inputs.platform }})
+    runs-on: ${{ inputs.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set version in version file
+        shell: bash
+        run: |
+          echo "VERSION = \"${{ inputs.version_label }}\"" > blueprints/github_version_file.py
+
+      - name: Ensure changelog file exists
+        if: ${{ !inputs.fetch_changelog }}
+        shell: bash
+        run: |
+          echo "No release changelog for this build." > LATEST_CHANGELOG.md
+
+      - name: Fetch latest release changelog
+        if: ${{ inputs.fetch_changelog }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view --json body --jq '.body' > LATEST_CHANGELOG.md || echo "No previous release notes found." > LATEST_CHANGELOG.md
+          echo "Changelog fetched successfully:"
+          cat LATEST_CHANGELOG.md
+          echo "----- End of Changelog -----"
+
+      - name: Build (build.py)
+        shell: bash
+        run: |
+          python build.py
+
+      - name: Package artifact
+        if: ${{ inputs.upload_artifact }}
+        shell: bash
+        run: |
+          ARTIFACT="op-1z-sample-manager-${{ inputs.platform }}-${{ inputs.version_label }}"
+          mkdir -p artifacts
+          if [ ! -d "dist" ]; then
+            echo "dist/ not found; build likely failed."
+            exit 1
+          fi
+          cd dist
+          if [ "${{ inputs.platform }}" = "macos" ]; then
+            TARGET="OP-1Z Sample Manager.app"
+          else
+            TARGET="."
+          fi
+          if command -v 7z >/dev/null 2>&1; then
+            7z a "../artifacts/${ARTIFACT}.zip" "$TARGET"
+          else
+            zip -r "../artifacts/${ARTIFACT}.zip" "$TARGET"
+          fi
+          cd ..
+
+      - name: Upload build artifact
+        if: ${{ inputs.upload_artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: op-1z-sample-manager-${{ inputs.platform }}-${{ inputs.version_label }}
+          path: artifacts/*.zip
