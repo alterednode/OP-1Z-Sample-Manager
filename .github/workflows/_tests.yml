@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  workflow_call:
+
+jobs:
+  python_tests:
+    uses: ./.github/workflows/_python_tests.yml
+
+  tests_complete:
+    name: Tests Complete
+    if: always()
+    needs:
+      - python_tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fail if any test suite failed
+        shell: bash
+        run: |
+          if [[ "${{ needs.python_tests.result }}" != "success" ]]; then
+            echo "One or more test suites failed."
+            exit 1
+          fi
