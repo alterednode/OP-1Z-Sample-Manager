@@ -1,0 +1,55 @@
+name: PR Gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/_tests.yml
+
+  build_windows:
+    uses: ./.github/workflows/_build.yml
+    with:
+      os: windows-latest
+      platform: windows
+      version_label: pr-${{ github.event.pull_request.number }}
+
+  build_macos:
+    uses: ./.github/workflows/_build.yml
+    with:
+      os: macos-latest
+      platform: macos
+      version_label: pr-${{ github.event.pull_request.number }}
+
+  pr_gate:
+    name: PR Gate
+    if: always()
+    needs:
+      - tests
+      - build_windows
+      - build_macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required checks
+        shell: bash
+        env:
+          TESTS_RESULT: ${{ needs.tests.result }}
+          WINDOWS_BUILD_RESULT: ${{ needs.build_windows.result }}
+          MACOS_BUILD_RESULT: ${{ needs.build_macos.result }}
+        run: |
+          if [[ "$TESTS_RESULT" != "success" || \
+                "$WINDOWS_BUILD_RESULT" != "success" || \
+                "$MACOS_BUILD_RESULT" != "success" ]]; then
+            echo "Tests: $TESTS_RESULT"
+            echo "Windows build: $WINDOWS_BUILD_RESULT"
+            echo "macOS build: $MACOS_BUILD_RESULT"
+            exit 1
+          fi
