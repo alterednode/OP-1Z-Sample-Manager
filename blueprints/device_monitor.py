@@ -36,9 +36,9 @@ OPZ_UPGRADE_MODE_MARKERS = ["how_to_upgrade.txt", "systeminfo"]
 def normalize_usb_id(value):
     """Convert USB ID from any format (int, hex string, decimal string) to int.
 
-    On Windows, USB vendor/product IDs are reported as 4-character hex strings
-    without the '0x' prefix (e.g., '2367' for 0x2367). We detect this pattern
-    and parse as hex.
+    usbmonitor reports IDs differently per platform: macOS gives decimal
+    strings ('9063' for 0x2367), Windows gives 4-character hex strings without
+    the '0x' prefix ('2367'). The two are ambiguous, so the platform decides.
     """
     if value is None:
         return None
@@ -51,9 +51,7 @@ def normalize_usb_id(value):
         # Try hex format (with 0x prefix)
         if value.startswith('0x'):
             return int(value, 16)
-        # USB IDs on Windows are typically 4-char hex strings (e.g., '2367', '000c')
-        # If it's exactly 4 chars and valid hex, treat as hex
-        if len(value) == 4:
+        if len(value) == 4 and sys.platform != "darwin":
             try:
                 return int(value, 16)
             except ValueError:
