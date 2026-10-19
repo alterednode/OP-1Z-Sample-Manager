@@ -43,10 +43,10 @@ python3 packaging/linux/smoke.py '/absolute/extracted/OP-1Z Sample Manager/OP-1Z
 ```
 
 The smoke wrapper starts its own private Xvfb display (never your desktop), uses disposable config/work directories, clears PYTHONPATH
-and VIRTUAL_ENV, runs from outside the checkout, and enforces a 75-second timeout.
+and VIRTUAL_ENV, runs from outside the checkout, and enforces a 75-second timeout per launch. It launches twice to verify settings persistence across restarts.
 The executable's `--smoke-test` requires directory overrides. It loads the GTK
 window, checks page DOM and styles with JavaScript, converts generated stereo
-48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, exercises real GTK selection/cancellation for all four dialog routes, then closes.
+48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, exercises real GTK selection/cancellation for all four dialog routes, verifies silent WAV playback, then closes. Smoke launches use an ephemeral loopback port.
 Xvfb is required even in a desktop session. OP1Z_XVFB may specify its executable path.
 
 ## GitHub Actions

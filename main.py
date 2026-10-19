@@ -6,7 +6,8 @@ import urllib.request
 import webview
 from blueprints.github_version_file import VERSION as APP_VERSION
 
-FLASK_URL = "http://127.0.0.1:5000"
+FLASK_PORT = 5000
+FLASK_URL = f"http://127.0.0.1:{FLASK_PORT}"
 
 
 def get_base_dir():
@@ -18,7 +19,7 @@ def get_base_dir():
 def start_flask():
     from app import app, app_startup_tasks
     app_startup_tasks()
-    app.run(debug=False, use_reloader=False, threaded=True)
+    app.run(debug=False, use_reloader=False, threaded=True, port=FLASK_PORT)
 
 
 def wait_for_flask_and_load(window, timeout=30):
@@ -57,6 +58,11 @@ if __name__ == "__main__":
         if not all(os.environ.get(key) for key in (EnvVars.CONFIG_DIR, EnvVars.WORKING_DIR)):
             raise SystemExit('Smoke tests require isolated config and working directory overrides')
         from blueprints.linux_smoke import run as run_smoke
+        import socket
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1', 0))
+            FLASK_PORT = listener.getsockname()[1]
+        FLASK_URL = f'http://127.0.0.1:{FLASK_PORT}'
 
     # Start Flask in background thread
     flask_thread = threading.Thread(target=start_flask, daemon=True)

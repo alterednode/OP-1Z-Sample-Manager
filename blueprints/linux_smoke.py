@@ -97,8 +97,29 @@ def run(window, url, result):
         with tempfile.TemporaryDirectory() as directory:
             check_audio(directory)
             check_dialogs(url, directory)
+            # Decode/play silently: do not make noise on the user's desktop.
+            import base64
+            encoded = base64.b64encode((Path(directory) / 'input.wav').read_bytes()).decode()
+            window.evaluate_js("""window.smokeAudio = new Audio();
+                window.smokeAudio.muted = true;
+                window.smokeAudioResult = 'pending';
+                window.smokeAudio.onended = () => window.smokeAudioResult = 'ended';
+                window.smokeAudio.onerror = () => window.smokeAudioResult = 'error';
+                window.smokeAudio.src = 'data:audio/wav;base64,""" + encoded + """';
+                window.smokeAudio.play().catch(e => window.smokeAudioResult = String(e));""")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                playback = window.evaluate_js('window.smokeAudioResult')
+                if playback != 'pending':
+                    break
+                time.sleep(0.1)
+            assert playback == 'ended', playback
+        from .config import get_config_setting, set_config_setting
+        if os.environ.get('OP1Z_SMOKE_EXPECT_RESTART') == '1':
+            assert get_config_setting('LINUX_SMOKE_PERSISTENCE') == 'saved'
+        set_config_setting('LINUX_SMOKE_PERSISTENCE', 'saved')
         result['ok'] = True
-        print(json.dumps({'smoke': 'passed', 'page': True, 'javascript': True, 'conversion': True, 'dialogs': True}), flush=True)
+        print(json.dumps({'smoke': 'passed', 'page': True, 'javascript': True, 'conversion': True, 'dialogs': True, 'silent_playback': True, 'settings': True}), flush=True)
     except Exception:
         import traceback
         traceback.print_exc()

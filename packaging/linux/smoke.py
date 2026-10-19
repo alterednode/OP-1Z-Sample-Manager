@@ -43,8 +43,13 @@ with tempfile.TemporaryDirectory(prefix='op1z-smoke-') as directory:
             else:
                 raise SystemExit('Xvfb failed to initialize')
             env['DISPLAY'] = ':' + number
-            completed = subprocess.run(sys.argv[1:] + ['--smoke-test'], env=env, cwd=root, timeout=75)
-            raise SystemExit(completed.returncode)
+            for attempt in range(2):
+                if attempt:
+                    env['OP1Z_SMOKE_EXPECT_RESTART'] = '1'
+                completed = subprocess.run(sys.argv[1:] + ['--smoke-test'], env=env, cwd=root, timeout=75)
+                if completed.returncode:
+                    raise SystemExit(completed.returncode)
+            raise SystemExit(0)
         except subprocess.TimeoutExpired:
             raise SystemExit('Desktop smoke test timed out')
         finally:
