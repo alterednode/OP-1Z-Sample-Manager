@@ -10,7 +10,7 @@ not implemented and Linux test archives are not published as releases.
 Install system dependencies (once):
 
 ```sh
-sudo dnf install python3 python3-pip python3-gobject python3-cairo gtk3 webkit2gtk4.1 libsndfile ffmpeg
+sudo dnf install python3 python3-pip python3-gobject python3-cairo gtk3 webkit2gtk4.1 libsndfile ffmpeg xorg-x11-server-Xvfb
 python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -r packaging/linux/requirements.txt -r requirements-dev.txt
 PYTHONNOUSERSITE=1 .venv/bin/python main.py
@@ -42,12 +42,12 @@ Extract the archive into a temporary directory outside the repository and run:
 python3 packaging/linux/smoke.py '/absolute/extracted/OP-1Z Sample Manager/OP-1Z Sample Manager'
 ```
 
-The smoke wrapper uses disposable config/work directories, clears PYTHONPATH
+The smoke wrapper starts its own private Xvfb display (never your desktop), uses disposable config/work directories, clears PYTHONPATH
 and VIRTUAL_ENV, runs from outside the checkout, and enforces a 75-second timeout.
 The executable's `--smoke-test` requires directory overrides. It loads the GTK
 window, checks page DOM and styles with JavaScript, converts generated stereo
 48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, exercises real GTK selection/cancellation for all four dialog routes, then closes.
-For a headless session prefix the wrapper command with `xvfb-run -a`.
+Xvfb is required even in a desktop session. OP1Z_XVFB may specify its executable path.
 
 ## GitHub Actions
 

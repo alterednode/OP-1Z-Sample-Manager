@@ -146,7 +146,7 @@ jobs:
           set -o pipefail
           mkdir -p artifacts
           python -m pytest -q 2>&1 | tee artifacts/linux-tests.log
-          xvfb-run -a python packaging/linux/smoke.py "$PWD/.venv/bin/python" "$PWD/main.py" 2>&1 | tee artifacts/linux-source.log
+          python packaging/linux/smoke.py "$PWD/.venv/bin/python" "$PWD/main.py" 2>&1 | tee artifacts/linux-source.log
 
       - name: Build (build.py)
         shell: bash
@@ -173,7 +173,7 @@ jobs:
           EXTRACT_DIR=$(mktemp -d)
           trap 'rm -rf "$EXTRACT_DIR"' EXIT
           tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
-          env -u PYTHONPATH -u VIRTUAL_ENV PATH=/usr/bin:/bin xvfb-run -a /usr/bin/python3 packaging/linux/smoke.py "$EXTRACT_DIR/OP-1Z Sample Manager/OP-1Z Sample Manager" 2>&1 | tee artifacts/linux-frozen.log
+          env -u PYTHONPATH -u VIRTUAL_ENV PATH=/usr/bin:/bin /usr/bin/python3 packaging/linux/smoke.py "$EXTRACT_DIR/OP-1Z Sample Manager/OP-1Z Sample Manager" 2>&1 | tee artifacts/linux-frozen.log
           sha256sum "$ARCHIVE" > artifacts/linux-sha256.txt
 
       - name: Upload Linux diagnostics
