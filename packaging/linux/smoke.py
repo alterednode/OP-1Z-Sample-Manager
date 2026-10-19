@@ -12,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix='op1z-smoke-') as directory:
     env.pop('PYTHONPATH', None)
     env.pop('VIRTUAL_ENV', None)
     env['PYTHONNOUSERSITE'] = '1'
+    env['GSETTINGS_BACKEND'] = 'memory'
     env['XDG_CACHE_HOME'] = str(root / 'cache')
     env['XDG_DATA_HOME'] = str(root / 'data')
     env['OP-1Z_SM_CONFIG_DIR'] = str(root / 'config')

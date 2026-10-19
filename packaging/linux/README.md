@@ -46,7 +46,7 @@ The smoke wrapper uses disposable config/work directories, clears PYTHONPATH
 and VIRTUAL_ENV, runs from outside the checkout, and enforces a 75-second timeout.
 The executable's `--smoke-test` requires directory overrides. It loads the GTK
 window, checks page DOM and styles with JavaScript, converts generated stereo
-48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, then closes.
+48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, exercises real GTK selection/cancellation for all four dialog routes, then closes.
 For a headless session prefix the wrapper command with `xvfb-run -a`.
 
 ## GitHub Actions

@@ -109,3 +109,19 @@ def test_linux_build_ffmpeg(monkeypatch):
     assert build.ensure_ffmpeg() is False
     monkeypatch.setattr(build.shutil, 'which', lambda _: '/usr/bin/ffmpeg')
     assert build.ensure_ffmpeg() is True
+
+
+@pytest.mark.parametrize('original', [None, '/system/libs'])
+def test_frozen_system_ffmpeg_library_path(monkeypatch, original):
+    import subprocess
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(utils.shutil, 'which', lambda _: '/usr/bin/ffmpeg')
+    env = {'LD_LIBRARY_PATH': '/bundle/libs'}
+    if original is not None:
+        env['LD_LIBRARY_PATH_ORIG'] = original
+    run = Mock()
+    monkeypatch.setattr(subprocess, 'run', run)
+    utils.run_ffmpeg(['-version'], env=env)
+    assert run.call_args.kwargs['env'].get('LD_LIBRARY_PATH') == original
+    assert env['LD_LIBRARY_PATH'] == '/bundle/libs'

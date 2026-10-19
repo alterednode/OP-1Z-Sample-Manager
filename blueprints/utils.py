@@ -73,4 +73,15 @@ def run_ffmpeg(args, **kwargs):
     if sys.platform == 'win32':
         kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
 
+    if sys.platform.startswith('linux') and getattr(sys, 'frozen', False):
+        # PyInstaller changes the loader path for bundled libraries. System
+        # FFmpeg must load its own libraries, not incompatible bundled copies.
+        env = dict(kwargs.get('env', os.environ))
+        original = env.get('LD_LIBRARY_PATH_ORIG')
+        if original is None:
+            env.pop('LD_LIBRARY_PATH', None)
+        else:
+            env['LD_LIBRARY_PATH'] = original
+        kwargs['env'] = env
+
     return subprocess.run(cmd, **kwargs)
