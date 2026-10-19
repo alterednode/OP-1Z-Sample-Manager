@@ -1,6 +1,7 @@
 """Shared utilities for blueprint modules."""
 import os
 import sys
+import shutil
 
 # Export tape constants
 EXPORT_TAPE_PREFIX = "op1_tape_track_"
@@ -31,12 +32,17 @@ def get_unique_filepath(base_path: str) -> str:
 def get_ffmpeg_path():
     """Get the path to the FFMPEG executable.
 
-    When running as a bundled app (frozen), returns the path to the bundled
-    FFMPEG binary. In development mode, returns 'ffmpeg' to use system PATH.
+    Linux always resolves FFmpeg on PATH. Bundled Windows/macOS apps use
+    their bundled executable; other source runs use 'ffmpeg' from PATH.
 
     Returns:
         str: Path to FFMPEG executable
     """
+    if sys.platform.startswith('linux'):
+        executable = shutil.which('ffmpeg')
+        if not executable:
+            raise FileNotFoundError('FFmpeg is required. Install ffmpeg with your system package manager and ensure it is on PATH.')
+        return executable
     if getattr(sys, 'frozen', False):
         # Running as bundled app
         if sys.platform == 'darwin':

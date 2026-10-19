@@ -9,6 +9,8 @@ block_cipher = None
 # Platform-specific FFMPEG binary
 if sys.platform == 'darwin':
     ffmpeg_binary = [('bin/ffmpeg', 'bin')]
+elif sys.platform.startswith('linux'):
+    ffmpeg_binary = []
 else:
     ffmpeg_binary = [('bin/ffmpeg.exe', 'bin')]
 
@@ -48,6 +50,10 @@ hiddenimports += [
 hiddenimports += ['blueprints.migration', 'blueprints.migration.migration_scripts']
 hiddenimports += collect_submodules('blueprints.migration.migration_scripts')
 
+linux = sys.platform.startswith('linux')
+if linux:
+    hiddenimports += ['webview.platforms.gtk', 'gi.repository.Gtk', 'gi.repository.WebKit2', 'gi.repository.Soup']
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -55,9 +61,9 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    hooksconfig={},
+    hooksconfig={'gi': {'module-versions': {'Gtk': '3.0', 'WebKit2': '4.1', 'Soup': '3.0'}}} if linux else {},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'qtpy'] if linux else [],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -85,6 +91,11 @@ if sys.platform == 'win32':
         target_arch=None,
         icon='static/favicon.ico',
     )
+elif linux:
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True,
+              name='OP-1Z Sample Manager', console=True, strip=False, upx=False)
+    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False,
+                   name='OP-1Z Sample Manager')
 else:
     # macOS: Folder mode, then wrap in .app bundle.
     # Signing is opt-in via MACOS_CODESIGN_IDENTITY so local/unsigned builds still work.

@@ -1,0 +1,4 @@
+# GTK/PyGObject and WebKitGTK 4.1 are installed through the OS package manager.
+# Use a --system-site-packages virtualenv with the distribution Python.
+-r ../../requirements.txt
+pycairo>=1.20

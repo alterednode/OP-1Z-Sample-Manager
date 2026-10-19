@@ -49,6 +49,15 @@ def load_loading_html():
 
 
 if __name__ == "__main__":
+    smoke = '--smoke-test' in sys.argv
+    smoke_result = {'ok': False}
+    if smoke:
+        # Smoke checks must never read or migrate the user's settings.
+        from blueprints.constants import EnvVars
+        if not all(os.environ.get(key) for key in (EnvVars.CONFIG_DIR, EnvVars.WORKING_DIR)):
+            raise SystemExit('Smoke tests require isolated config and working directory overrides')
+        from blueprints.linux_smoke import run as run_smoke
+
     # Start Flask in background thread
     flask_thread = threading.Thread(target=start_flask, daemon=True)
     flask_thread.start()
@@ -71,4 +80,10 @@ if __name__ == "__main__":
     window.events.loaded += on_loaded
 
     # Start the webview (blocks until window is closed)
-    webview.start()
+    webview.start(
+        func=run_smoke if smoke else None,
+        args=(window, FLASK_URL, smoke_result) if smoke else (),
+        gui="gtk" if sys.platform.startswith("linux") else None,
+    )
+    if smoke:
+        raise SystemExit(0 if smoke_result['ok'] else 1)

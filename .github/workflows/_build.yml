@@ -47,7 +47,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Linux system dependencies
+        if: inputs.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libsndfile1 ffmpeg xvfb xauth
+          /usr/bin/python3 -m venv --system-site-packages .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
       - name: Setup Python
+        if: inputs.platform != 'linux'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -57,7 +66,11 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ "${{ inputs.platform }}" = "linux" ]; then
+            pip install -r packaging/linux/requirements.txt -r requirements-dev.txt
+          else
+            pip install -r requirements.txt
+          fi
 
       - name: Set version in version file
         shell: bash
@@ -123,6 +136,15 @@ jobs:
           echo "MACOS_CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           echo "SIGNING_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
+      - name: Linux source checks
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          python -m pytest -q 2>&1 | tee artifacts/linux-tests.log
+          xvfb-run -a python packaging/linux/smoke.py "$PWD/.venv/bin/python" "$PWD/main.py" 2>&1 | tee artifacts/linux-source.log
+
       - name: Build (build.py)
         shell: bash
         env:
@@ -130,7 +152,34 @@ jobs:
           APPLE_TEAM_ID: ${{ inputs.notarize && secrets.APPLE_TEAM_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.notarize && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
         run: |
-          python build.py
+          set -o pipefail
+          mkdir -p artifacts
+          python build.py 2>&1 | tee artifacts/build.log
+
+      - name: Linux archive and frozen smoke test
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          VERSION_LABEL: ${{ inputs.version_label }}
+        run: |
+          set -o pipefail
+          ARCHIVE="$PWD/artifacts/op-1z-sample-manager-linux-x86_64-${VERSION_LABEL//\//-}.tar.gz"
+          tar -czf "$ARCHIVE" -C dist 'OP-1Z Sample Manager'
+          EXTRACT_DIR=$(mktemp -d)
+          trap 'rm -rf "$EXTRACT_DIR"' EXIT
+          tar -xzf "$ARCHIVE" -C "$EXTRACT_DIR"
+          env -u PYTHONPATH -u VIRTUAL_ENV PATH=/usr/bin:/bin xvfb-run -a /usr/bin/python3 packaging/linux/smoke.py "$EXTRACT_DIR/OP-1Z Sample Manager/OP-1Z Sample Manager" 2>&1 | tee artifacts/linux-frozen.log
+          sha256sum "$ARCHIVE" > artifacts/linux-sha256.txt
+
+      - name: Upload Linux diagnostics
+        if: always() && inputs.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-diagnostics-${{ inputs.version_label }}
+          path: |
+            artifacts/*.log
+            artifacts/linux-sha256.txt
+            build/**/warn-*.txt
 
       - name: Remove signing keychain
         if: ${{ always() && env.SIGNING_KEYCHAIN_PATH != '' }}
@@ -139,7 +188,7 @@ jobs:
           security delete-keychain "$SIGNING_KEYCHAIN_PATH"
 
       - name: Package artifact
-        if: ${{ inputs.upload_artifact }}
+        if: ${{ inputs.upload_artifact && inputs.platform != 'linux' }}
         shell: bash
         env:
           PLATFORM: ${{ inputs.platform }}
@@ -171,4 +220,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: op-1z-sample-manager-${{ inputs.platform }}-${{ inputs.version_label }}
-          path: artifacts/*.zip
+          path: |
+            artifacts/*.zip
+            artifacts/*.tar.gz

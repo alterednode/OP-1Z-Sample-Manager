@@ -37,6 +37,8 @@ def get_bin_dir():
 
 def get_ffmpeg_path():
     """Get the expected FFMPEG binary path for the current platform."""
+    if sys.platform.startswith("linux"):
+        return shutil.which("ffmpeg")
     bin_dir = get_bin_dir()
     if sys.platform == "darwin":
         return os.path.join(bin_dir, "ffmpeg")
@@ -137,6 +139,11 @@ def download_ffmpeg_windows():
 def ensure_ffmpeg():
     """Ensure FFMPEG is available, downloading if necessary."""
     ffmpeg_path = get_ffmpeg_path()
+    if sys.platform.startswith("linux"):
+        if not ffmpeg_path:
+            print("Install ffmpeg with your system package manager and ensure it is on PATH.")
+            return False
+        return subprocess.run([ffmpeg_path, "-version"], stdout=subprocess.DEVNULL).returncode == 0
 
     if os.path.exists(ffmpeg_path):
         print(f"FFMPEG already exists: {ffmpeg_path}")

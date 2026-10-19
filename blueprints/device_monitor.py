@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 import subprocess
+import re
 from queue import Queue
 from flask import Blueprint, Response, jsonify, current_app, request
 from .config import get_config_setting, set_config_setting
@@ -199,6 +200,34 @@ def find_device_mount_windows(device):
     return None, None
 
 
+def find_device_mount_linux(device):
+    """Inspect mounted filesystems without mounting or modifying any device."""
+    try:
+        with open('/proc/self/mountinfo', encoding='utf-8') as mounts:
+            candidates = []
+            for line in mounts:
+                fields = line.split()
+                if len(fields) < 6 or ' - ' not in line:
+                    continue
+                path = re.sub(r'\\([0-7]{3})', lambda match: chr(int(match[1], 8)), fields[4])
+                if path not in candidates:
+                    candidates.append(path)
+    except OSError:
+        return None, None
+    for path in candidates:
+        try:
+            if not os.path.isdir(path) or not os.access(path, os.R_OK | os.X_OK):
+                continue
+            if device == 'opz' and check_opz_upgrade_mode(path):
+                return path, 'upgrade'
+            valid, _ = validate_device_folder_structure(device, path)
+            if valid:
+                return path, 'storage'
+        except OSError:
+            continue
+    return None, None
+
+
 def find_device_mount(device):
     """Find device mount path based on current OS.
 
@@ -209,6 +238,8 @@ def find_device_mount(device):
         return find_device_mount_macos(device)
     elif sys.platform == "win32":
         return find_device_mount_windows(device)
+    elif sys.platform.startswith("linux"):
+        return find_device_mount_linux(device)
     return None, None
 
 

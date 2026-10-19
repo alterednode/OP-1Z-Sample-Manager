@@ -24,3 +24,6 @@ bin/
 *.p12
 *.cer
 *.certSigningRequest
+
+# Local validation artifacts
+artifacts/

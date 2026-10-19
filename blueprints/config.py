@@ -33,7 +33,10 @@ def get_config_dir():
     elif sys.platform == 'win32':
         config_dir = os.path.join(os.environ.get('APPDATA', ''), 'OP-1Z Sample Manager')
     else:
-        config_dir = os.path.expanduser('~/.config/OP-1Z Sample Manager')
+        config_home = os.environ.get('XDG_CONFIG_HOME', '')
+        if not os.path.isabs(config_home):
+            config_home = os.path.expanduser('~/.config')
+        config_dir = os.path.join(config_home, 'OP-1Z Sample Manager')
     # Create directory if it doesn't exist
     os.makedirs(config_dir, exist_ok=True)
     return config_dir

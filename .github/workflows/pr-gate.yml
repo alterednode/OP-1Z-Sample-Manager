@@ -14,6 +14,14 @@ jobs:
   tests:
     uses: ./.github/workflows/_tests.yml
 
+  build_linux:
+    uses: ./.github/workflows/_build.yml
+    with:
+      os: ubuntu-24.04
+      platform: linux
+      version_label: pr-${{ github.event.pull_request.number }}
+      upload_artifact: true
+
   build_windows:
     uses: ./.github/workflows/_build.yml
     with:
@@ -37,19 +45,22 @@ jobs:
       - tests
       - build_windows
       - build_macos
+      - build_linux
     runs-on: ubuntu-latest
 
     steps:
       - name: Verify required checks
         shell: bash
         env:
+          LINUX_BUILD_RESULT: ${{ needs.build_linux.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           WINDOWS_BUILD_RESULT: ${{ needs.build_windows.result }}
           MACOS_BUILD_RESULT: ${{ needs.build_macos.result }}
         run: |
-          if [[ "$TESTS_RESULT" != "success" || \
+          if [[ "$LINUX_BUILD_RESULT" != "success" || "$TESTS_RESULT" != "success" || \
                 "$WINDOWS_BUILD_RESULT" != "success" || \
                 "$MACOS_BUILD_RESULT" != "success" ]]; then
+            echo "Linux build: $LINUX_BUILD_RESULT"
             echo "Tests: $TESTS_RESULT"
             echo "Windows build: $WINDOWS_BUILD_RESULT"
             echo "macOS build: $MACOS_BUILD_RESULT"
