@@ -125,3 +125,15 @@ def test_frozen_system_ffmpeg_library_path(monkeypatch, original):
     utils.run_ffmpeg(['-version'], env=env)
     assert run.call_args.kwargs['env'].get('LD_LIBRARY_PATH') == original
     assert env['LD_LIBRARY_PATH'] == '/bundle/libs'
+
+
+@pytest.mark.parametrize('label,is_tag,expected', [
+    ('dev-abc123', False, '0.0.0.dev0+dev.abc123'),
+    ('pr-4', False, '0.0.0.dev0+pr.4'),
+    ('v2.3.0', True, '2.3.0'),
+])
+def test_ci_application_version(label, is_tag, expected):
+    import runpy
+    from pathlib import Path
+    module = runpy.run_path(str(Path(__file__).resolve().parents[3] / 'packaging/set_build_version.py'))
+    assert module['application_version'](label, is_tag) == expected
