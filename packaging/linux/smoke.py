@@ -46,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='op1z-smoke-') as directory:
             for attempt in range(2):
                 if attempt:
                     env['OP1Z_SMOKE_EXPECT_RESTART'] = '1'
-                completed = subprocess.run(sys.argv[1:] + ['--smoke-test'], env=env, cwd=root, timeout=75)
+                completed = subprocess.run(['dbus-run-session', '--'] + sys.argv[1:] + ['--smoke-test'], env=env, cwd=root, timeout=90)
                 if completed.returncode:
                     raise SystemExit(completed.returncode)
             raise SystemExit(0)

@@ -57,6 +57,7 @@ if __name__ == "__main__":
         from blueprints.constants import EnvVars
         if not all(os.environ.get(key) for key in (EnvVars.CONFIG_DIR, EnvVars.WORKING_DIR)):
             raise SystemExit('Smoke tests require isolated config and working directory overrides')
+        webview.settings['OPEN_DEVTOOLS_IN_DEBUG'] = False
         from blueprints.linux_smoke import run as run_smoke
         import socket
         with socket.socket() as listener:
@@ -90,6 +91,7 @@ if __name__ == "__main__":
         func=run_smoke if smoke else None,
         args=(window, FLASK_URL, smoke_result) if smoke else (),
         gui="gtk" if sys.platform.startswith("linux") else None,
+        debug=smoke,
     )
     if smoke:
         raise SystemExit(0 if smoke_result['ok'] else 1)

@@ -85,6 +85,8 @@ def check_dialogs(url, directory):
 def run(window, url, result):
     """Called on pywebview's worker thread, never on the GUI thread."""
     try:
+        if not window.events.loaded.wait(45):
+            raise RuntimeError('GTK did not finish loading its initial page')
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if window.get_current_url() == url + '/':

@@ -10,7 +10,7 @@ not implemented and Linux test archives are not published as releases.
 Install system dependencies (once):
 
 ```sh
-sudo dnf install python3 python3-pip python3-gobject python3-cairo gtk3 webkit2gtk4.1 libsndfile ffmpeg xorg-x11-server-Xvfb
+sudo dnf install python3 python3-pip python3-gobject python3-cairo gtk3 webkit2gtk4.1 libsndfile ffmpeg xorg-x11-server-Xvfb dbus-daemon
 python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install -r packaging/linux/requirements.txt -r requirements-dev.txt
 PYTHONNOUSERSITE=1 .venv/bin/python main.py
@@ -42,8 +42,8 @@ Extract the archive into a temporary directory outside the repository and run:
 python3 packaging/linux/smoke.py '/absolute/extracted/OP-1Z Sample Manager/OP-1Z Sample Manager'
 ```
 
-The smoke wrapper starts its own private Xvfb display (never your desktop), uses disposable config/work directories, clears PYTHONPATH
-and VIRTUAL_ENV, runs from outside the checkout, and enforces a 75-second timeout per launch. It launches twice to verify settings persistence across restarts.
+The smoke wrapper starts its own private Xvfb display and D-Bus session (never your desktop), uses disposable config/work directories, clears PYTHONPATH
+and VIRTUAL_ENV, runs from outside the checkout, and enforces a 90-second timeout per launch. It launches twice to verify settings persistence across restarts.
 The executable's `--smoke-test` requires directory overrides. It loads the GTK
 window, checks page DOM and styles with JavaScript, converts generated stereo
 48 kHz audio to mono 44.1 kHz 16-bit AIFF, verifies the result, exercises real GTK selection/cancellation for all four dialog routes, verifies silent WAV playback, then closes. Smoke launches use an ephemeral loopback port.
