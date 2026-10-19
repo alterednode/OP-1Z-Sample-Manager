@@ -10,6 +10,7 @@ import sys
 import time
 import threading
 import subprocess
+import re
 from queue import Queue
 from flask import Blueprint, Response, jsonify, current_app, request
 from .config import get_config_setting, set_config_setting
@@ -36,9 +37,9 @@ OPZ_UPGRADE_MODE_MARKERS = ["how_to_upgrade.txt", "systeminfo"]
 def normalize_usb_id(value):
     """Convert USB ID from any format (int, hex string, decimal string) to int.
 
-    On Windows, USB vendor/product IDs are reported as 4-character hex strings
-    without the '0x' prefix (e.g., '2367' for 0x2367). We detect this pattern
-    and parse as hex.
+    usbmonitor reports IDs differently per platform: macOS gives decimal
+    strings ('9063' for 0x2367), Windows gives 4-character hex strings without
+    the '0x' prefix ('2367'). The two are ambiguous, so the platform decides.
     """
     if value is None:
         return None
@@ -51,9 +52,7 @@ def normalize_usb_id(value):
         # Try hex format (with 0x prefix)
         if value.startswith('0x'):
             return int(value, 16)
-        # USB IDs on Windows are typically 4-char hex strings (e.g., '2367', '000c')
-        # If it's exactly 4 chars and valid hex, treat as hex
-        if len(value) == 4:
+        if len(value) == 4 and sys.platform != "darwin":
             try:
                 return int(value, 16)
             except ValueError:
@@ -201,6 +200,34 @@ def find_device_mount_windows(device):
     return None, None
 
 
+def find_device_mount_linux(device):
+    """Inspect mounted filesystems without mounting or modifying any device."""
+    try:
+        with open('/proc/self/mountinfo', encoding='utf-8') as mounts:
+            candidates = []
+            for line in mounts:
+                fields = line.split()
+                if len(fields) < 6 or ' - ' not in line:
+                    continue
+                path = re.sub(r'\\([0-7]{3})', lambda match: chr(int(match[1], 8)), fields[4])
+                if path not in candidates:
+                    candidates.append(path)
+    except OSError:
+        return None, None
+    for path in candidates:
+        try:
+            if not os.path.isdir(path) or not os.access(path, os.R_OK | os.X_OK):
+                continue
+            if device == 'opz' and check_opz_upgrade_mode(path):
+                return path, 'upgrade'
+            valid, _ = validate_device_folder_structure(device, path)
+            if valid:
+                return path, 'storage'
+        except OSError:
+            continue
+    return None, None
+
+
 def find_device_mount(device):
     """Find device mount path based on current OS.
 
@@ -211,6 +238,8 @@ def find_device_mount(device):
         return find_device_mount_macos(device)
     elif sys.platform == "win32":
         return find_device_mount_windows(device)
+    elif sys.platform.startswith("linux"):
+        return find_device_mount_linux(device)
     return None, None
 
 

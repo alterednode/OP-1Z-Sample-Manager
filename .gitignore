@@ -20,3 +20,10 @@ tmpclaude-*
 build/
 dist/
 bin/
+# signing material (never commit)
+*.p12
+*.cer
+*.certSigningRequest
+
+# Local validation artifacts
+artifacts/

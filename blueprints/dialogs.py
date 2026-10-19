@@ -97,6 +97,25 @@ def run_dialog_windows(mode):
         raise e
 
 
+def run_dialog_linux(mode):
+    """Let pywebview dispatch native dialogs onto the GTK event loop."""
+    import webview
+
+    modes = {"file": webview.FileDialog.OPEN, "multi": webview.FileDialog.OPEN,
+             "folder": webview.FileDialog.FOLDER, "save": webview.FileDialog.SAVE}
+    if mode not in modes:
+        return jsonify({"error": f"Unknown mode: {mode}"}), 400
+    if not webview.windows:
+        return jsonify({"error": "File dialogs require the desktop application window"}), 503
+    paths = webview.windows[0].create_file_dialog(modes[mode], allow_multiple=mode == "multi")
+    if not paths:
+        message = "No files selected" if mode == "multi" else "No selection made"
+        return jsonify({"error": message}), 400
+    if isinstance(paths, str):
+        paths = [paths]
+    return jsonify({"paths": list(paths)} if mode == "multi" else {"path": paths[0]})
+
+
 def run_dialog(mode):
     """Run a file/folder selection dialog."""
     try:
@@ -104,6 +123,8 @@ def run_dialog(mode):
             return run_dialog_macos(mode)
         elif sys.platform == 'win32':
             return run_dialog_windows(mode)
+        elif sys.platform.startswith('linux'):
+            return run_dialog_linux(mode)
         else:
             return jsonify({"error": "File dialogs not supported on this platform"}), 501
     except Exception as e:

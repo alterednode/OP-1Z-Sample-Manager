@@ -1,0 +1,18 @@
+name: Linux development
+on:
+  push:
+    branches: [linux-support]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-development-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    uses: ./.github/workflows/_build.yml
+    with:
+      os: ubuntu-24.04
+      platform: linux
+      version_label: dev-${{ github.sha }}
+      upload_artifact: true

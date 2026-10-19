@@ -40,3 +40,7 @@ For a complete list of third-party licenses, see [THIRD_PARTY_LICENSES.md](THIRD
 ## Blog Posts
 
 [View Roman Garms' original blog post](https://romangarms.com/portfolio/op-z-sample-manager-software-to-make-the-op-z-usable). A blog post about the reasoning behind the project and the problems it hopes to solve. Written 10/12/2025.
+
+### Linux development
+
+See [Linux build and validation instructions](packaging/linux/README.md) for the GTK backend, Fedora environment, and experimental CI test archives.
